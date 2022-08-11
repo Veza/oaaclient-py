@@ -1,18 +1,31 @@
 #!env python3
+"""
+Copyright 2022 Veza Technologies Inc.
+
+Use of this source code is governed by the MIT
+license that can be found in the LICENSE file or at
+https://opensource.org/licenses/MIT.
+"""
+
 from datetime import datetime
 from enum import Enum
 from typing import Union, List
 import argparse
+import base64
+import gzip
 import json
+import logging
 import os
 import re
 import requests
 import sys
+from requests.exceptions import JSONDecodeError as RequestsJSONDecodeError
 
 from oaaclient.templates import CustomApplication, CustomIdPProvider
 import oaaclient.utils as oaautils
 PROVIDER_ICON_MAX_SIZE = 64_000
 
+log = logging.getLogger(__name__)
 
 class OAAClientError(Exception):
     """Error raised by OAAClient
@@ -45,7 +58,7 @@ class OAAClient():
     payloads from JSON or template apps.
 
     Args:
-        url (str): URL for Veza isntance.
+        url (str): URL for Veza instance.
         api_key (str): Veza API key.
         username (str, optional): Not used (legacy). Defaults to None.
         token (str, optional): legacy parameter name for API key. Defaults to None.
@@ -62,6 +75,7 @@ class OAAClient():
             self.url = f"https://{url}"
         else:
             self.url = url
+        self.url = self.url.rstrip("/")
 
         # for development purposes only sometimes system is run without signed certificates,
         # disable certificate verification only if VEZA_UNSAFE_HTTPS OS env variable is set to true
@@ -69,7 +83,6 @@ class OAAClient():
         unsafe_https = os.getenv("VEZA_UNSAFE_HTTPS", "")
         if unsafe_https.lower() == "true":
             self.verify_ssl = False
-        self.url.rstrip("/")
 
         self.username = username
 
@@ -83,6 +96,7 @@ class OAAClient():
         if not self.api_key:
             raise OAAClientError("MISSING_AUTH", "API key cannot be None")
 
+        self.enable_compression = False
         # test connection to validate host and credentials
         providers = self.get_provider_list()
 
@@ -136,7 +150,7 @@ class OAAClient():
             base64_icon (str): Optional, Base64 encoded string of icon to set for Provider
 
         Returns:
-            dict: dictionary reprsenting new Provider created
+            dict: dictionary representing the created Provider
         """
         response = self.__perform_post("/api/v1/providers/custom", {"name": name, "custom_template": custom_template})
         provider = response['value']
@@ -230,7 +244,7 @@ class OAAClient():
         return datasource['value']
 
     def create_datasource(self, name, provider_id):
-        """ legacy function for backwards compatability """
+        """ legacy function for backwards compatibility """
         return self.create_data_source(name, provider_id)
 
     def delete_data_source(self, data_source_id: str, provider_id: str) -> dict:
@@ -285,7 +299,21 @@ class OAAClient():
             with open(out_name, "w") as f:
                 f.write(json.dumps(metadata, indent=2))
 
-        payload = {"id": provider["id"], "data_source_id": data_source["id"], "json_data": json.dumps(metadata)}
+        if self.enable_compression:
+            log.debug("Compressing payload")
+            payload_bytes = json.dumps(metadata).encode()
+            payload_size = sys.getsizeof(payload_bytes)
+            compressed_bytes = gzip.compress(payload_bytes)
+            del payload_bytes
+
+            encoded = base64.b64encode(compressed_bytes).decode()
+            encoded_size = sys.getsizeof(encoded)
+            del compressed_bytes
+            log.debug(f"Compression complete, payload size: {payload_size}, encoded compressed: {encoded_size}")
+            payload = {"id": provider["id"], "data_source_id": data_source["id"], "json_data": encoded, "compression_type": "GZIP"}
+        else:
+            payload = {"id": provider["id"], "data_source_id": data_source["id"], "json_data": json.dumps(metadata)}
+
         result = self.__perform_post(f"/api/v1/providers/custom/{provider['id']}/datasources/{data_source['id']}:push", payload)
 
         return result
@@ -293,7 +321,7 @@ class OAAClient():
     def push_application(self, provider_name: str, data_source_name: str, application_object: Union[CustomApplication, CustomIdPProvider], save_json=False) -> dict:
         """Push an OAA Application Object (such as CustomApplication)
 
-        Extract the OAA JSON payload from the supplied OAA class (e.g. CustomApplication, CustomIdPProvder) and push to
+        Extract the OAA JSON payload from the supplied OAA class (e.g. CustomApplication, CustomIdPProvider) and push to
         the supplied Data Source.
 
         The Provider must be a valid Provider (created ahead of time). A new data source will be created
@@ -333,7 +361,7 @@ class OAAClient():
             api_path (str): API path relative to Veza URL (example `/api/v1/providers`).
 
         Raises:
-            OAAClientError: If API operation does not complete succesfully
+            OAAClientError: If API operation does not complete successfully
 
         Returns:
             Union[list, dict]: Returns list or dict based on API destination
@@ -351,17 +379,14 @@ class OAAClient():
             # TODO: handle non json response
             try:
                 error = response.json()
-                if "message" in error:
-                    message = error['message']
-                else:
-                    message = "Unknown error in GET"
-                if "code" in error:
-                    code = error['code']
-                else:
-                    code = "UNKNOWN"
-                raise OAAClientError(code, message, status_code=response.status_code)
-            except json.decoder.JSONDecodeError:
+            except RequestsJSONDecodeError:
+                log.error("Unable to process API error response as JSON, raising generic response")
                 raise OAAClientError("ERROR", response.reason, response.status_code)
+            # process JSON response
+            message = error.get("message", "Unknown error durring GET")
+            code = error.get("code", "UNKNOWN")
+            raise OAAClientError(code, message, status_code=response.status_code, details=error.get("details", []))
+
 
     def api_post(self, api_path: str, data: dict) -> dict:
         """Perform Veza API POST operation
@@ -374,7 +399,7 @@ class OAAClient():
             data (dict): dictionary object included as JSON in body of POST operation
 
         Raises:
-            OAAClientError: If API operation does not complete succesfully
+            OAAClientError: If API operation does not complete successfully
 
         Returns:
             dict: API response as dictionary
@@ -388,23 +413,21 @@ class OAAClient():
         headers = {"Authorization": f"Bearer {self.api_key}"}
 
         api_path = api_path.lstrip("/")
-        response = requests.post(f"{self.url}/{api_path}", headers=headers, json=data, timeout=60, verify=self.verify_ssl)
+        response = requests.post(f"{self.url}/{api_path}", headers=headers, json=data, timeout=300, verify=self.verify_ssl)
         if response.ok:
             return response.json()
         else:
             try:
                 error = response.json()
-                if "message" in error:
-                    message = error['message']
-                else:
-                    message = "Unknown error during POST"
-                if "details" in error:
-                    details = []
-                    for e in error['details']:
-                        details.append(e)
-                raise OAAClientError(error['code'], message, status_code=response.status_code, details=details)
-            except json.decoder.JSONDecodeError:
-                raise OAAClientError("ERROR", f"{response.reason} - {response.url}", response.status_code)
+            except RequestsJSONDecodeError as e:
+                log.error("Unable to process API error response as JSON, raising generic response")
+                raise OAAClientError("ERROR", f"{response.reason} - {response.url}", status_code=response.status_code)
+            # process JSON response
+            message = error.get("message", "Unknown error durring POST")
+            code = error.get("code", "UNKNOWN")
+            raise OAAClientError(code, message, status_code=response.status_code, details=error.get("details", []))
+
+
 
     def api_delete(self, api_path:str) -> dict:
         """Perform REST API DELETE operation
@@ -428,17 +451,14 @@ class OAAClient():
         else:
             try:
                 error = response.json()
-                if "message" in error:
-                    message = error['message']
-                else:
-                    message = "Unknown error during POST"
-                if "details" in error:
-                    details = []
-                    for e in error['details']:
-                        details.append(e)
-                raise OAAClientError(error['code'], message, status_code=response.status_code, details=details)
-            except json.decoder.JSONDecodeError:
+            except RequestsJSONDecodeError:
+                log.error("Unable to process API error response as JSON, raising generic response")
                 raise OAAClientError("ERROR", f"{response.reason} - {response.url}", response.status_code)
+            # process JSON response
+            message = error.get("message", "Unknown error durring DELETE")
+            code = error.get("code", "UNKNOWN")
+            raise OAAClientError(code, message, status_code=response.status_code, details=error.get("details", []))
+
 
 def main():
     parser = argparse.ArgumentParser()

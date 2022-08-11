@@ -1,19 +1,21 @@
-# Veza OAA Python SDK
+# Python SDK for Veza Open Authorization API
 
-The Veza oaaclient Python SDK simplifies the process of integrating wiht the Open Authorization API (OAA).
+The `oaaclient` package provides types, functions, and a command-line interface for the Open Authorization API. You can use it to format and publish user, resource, and authorization metadata for processing by a Veza instance.
 
-## Getting Started
-```
-# pip install oaaclient
-```
+For example usage, please see the `samples` directory.
 
-## Developing Using the SDK
+## Using the SDK
 
-The `oaaclient` SDK consists of two main components:
-  * `oaaclient.client` - handles Veza API communication. Uses API key for authentication.
-  * `oaaclient.templates` - Contains the classes for modeling and generating OAA payload.
+The `oaaclient` SDK includes the following components:
+
+* `[oaaclient.client](./oaaclient/client.py)`: Veza API communication (data provider management, payload push, etc.). Requires an API key for authentication.
+* `[oaaclient.templates](oaaclient/templates.py)`: Classes for modeling and generating OAA payload.
+* `[oaaclient.utils](oaaclient/utils.py)`: Additional utility functions.
 
 ### Sample Workflow
+
+Create the Veza API connection and a new custom application:
+
 ```python
 from oaaclient.client import OAAClient
 from oaaclient.templates import CustomApplication, OAAPermission
@@ -25,7 +27,7 @@ veza_con = OAAClient(url=veza_url, token=veza_api_key)
 custom_app = CustomApplication(name="Sample App", application_type="sample")
 ```
 
-Once the `CustomApplication` class is instantiated you can access the public methods to add local users, groups and resources and the authorization between identities and resources.
+Once the `CustomApplication` class is instantiated, you can use the public methods to populate the new app with local users, groups, resources, and permissions metadata:
 
 ```python
 custom_app.add_custom_permission("owner", [OAAPermission.DataRead, OAAPermission.DataWrite])
@@ -34,21 +36,21 @@ resource1 = custom_app.add_resource(name="Resource 1", resource_type="thing")
 jane.add_permission(permission="owner", resources=[resource1])
 ```
 
-After all identities, permissions and resources have been modeled the client connection handles the final push to Veza
+Once all identities, permissions and resources are modeled, the client connection handles the final push to Veza:
 
 ```python
 veza_con.push_application(provider, data_source_name, application_object=custom_app)
 ```
 
-For complete examples of how to use the `oaaclient` SDK see the [samples](https://github.com/veza/oaaclient-py/samples)
-directory.
+See the [samples](../samples) directory for complete examples of how to use the `oaaclient` SDK.
 
 ## Command Line Use
 
-The oaaclient can also be used as a command line tool for pushing completed OAA payloads to Veza for testing and debugging.
+The oaaclient can also be used as a command line tool for pushing completed OAA payloads to Veza for testing and debugging, without needing to make the API requests "by hand."
 
-To use as a command line tool create the follwing JSON files:
-1. Provider - Name the provider and select a support OAA template. For list of supported templates see Veza documentation on Gitbook.
+You will need the following JSON files:
+
+1. `provider.json` - must contain the provider name and template to use (`application` or `idp`).
 
    ```json
    {
@@ -57,7 +59,7 @@ To use as a command line tool create the follwing JSON files:
    }
    ```
 
-2. Authorization - Define the Veza host API key to use
+2. `auth.json` - defines the Veza host and API key to use
 
      ```json
      {
@@ -66,13 +68,18 @@ To use as a command line tool create the follwing JSON files:
      }
      ```
 
-3. OAA Payload - The completed OAA JSON body to submit. For complete reference see the Veza documentation. This format must match the template selected with the provider.
+3. `payload.json` - The complete OAA JSON body to submit. For full reference see the Veza documentation. This format must match the schema (template) selected in `provider.json`.
 
+Once the above files are created, the payload can be pushed with the following command:
 
-Once the necessary files have been created, they can be pushed to Veza with the following command:
-
-```shell
-# oaaclient  --provider <provider-file>.json --auth <auth-file>.json <OAA Payload>.json
+```bash
+oaaclient  --provider provider.json --auth auth.json payload.json
 ```
 
-The client will read the files and push the payload to Veza. The client will automatically create any Provider or Data Sources needed.
+The client will read the files and push the payload to Veza. The client will automatically create any required custom provider and data sources.
+
+## Additional documentation
+
+Connector source code and `oaaclient` modules are thoroughly annotated, for reference when building your own integrations.
+
+For additional information on developing a custom OAA integration, please contact your Veza support team for access to the *User Guide*.

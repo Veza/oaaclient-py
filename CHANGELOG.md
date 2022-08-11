@@ -1,5 +1,15 @@
 # OAA Client Change Log
 
+## v0.9.9
+* `custom_app.add_idp_idententiy` is now `custom_app.add_idp_identity`
+* Docstring and README improvements
+* Improvements to OAAClientError exceptions raised when API returns errors and additional test cases
+* Changes to reduce OAA payload size during transfer.
+  * Removed unset/default values from payload
+  * Option to enable GZIP compression of payload
+  * Structure for identity to resource permissions
+* Automatically trim trailing slashes from Veza URL for `Client` connection
+
 ## v0.9.8
 * Initial release of oaaclient as Python Package
 
