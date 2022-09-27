@@ -1,5 +1,8 @@
 # OAA Client Change Log
 
+## v1.0
+* Release and package publication
+
 ## v0.9.11
 * Documentation updates including README and docstrings for client and template functions.
 * New sample `idp-import-csv.py` example for importing Custom IdP users from a CSV

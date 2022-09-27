@@ -50,7 +50,7 @@ Once all identities, permissions and resources are modeled, the client connectio
 veza_con.push_application(provider, data_source_name, application_object=custom_app)
 ```
 
-See the [samples](../samples) directory for complete examples of how to use the `oaaclient` SDK.
+For more examples see the [samples directory](https://github.com/Veza/oaaclient-py/tree/main/samples).
 
 ## Command Line Use
 
