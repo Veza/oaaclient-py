@@ -1,10 +1,13 @@
 # OAA Client Change Log
 
+## v1.0.2
+* `CustomIdPProvider.users` and `CustomerIdPProvider.groups` dictionaries are now keyed by user/group identity (if provided) to prevent duplicate name collisions. To reference a user or group from the map after creation, use the "identity" value. If an identity is not provided, "name" is used for both identity and key.
+
 ## v1.0.1
 * Added support for resource unique identifier separte from `name`.
   * `add_resource` and `add_sub_resource` functions allow new optional property `unique_id`
   * When `unique_id` is provided it will serve as the key for the resource in the `.resources` and `.sub_resources` dictionaries
-  * To use `unique_id` all resources must use `unique_id` 
+  * To use `unique_id` all resources must use `unique_id`
   * When using `unique_id` name does not need to be unique for a resource
 * Duplicate LocalRole permissions are removed before payload generation
 * Optimization to payload size for unset entities
