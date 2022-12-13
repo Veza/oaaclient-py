@@ -1,11 +1,22 @@
 # OAA Client Change Log
 
+## v1.0.3
+* Automatic API retries for connection errors
+* New exceptions `OAAResponseError`, `OAAConnectionError` that extend the base exception `OAAClientError`
+  * `OAAResponseError` raised for API calls that result in an error being returned from Veza
+  * `OAAConnectionError` raised for API calls that can't complete (for network and other connection errors)
+* Use new paging and filtering in Veza APIs to improve performance
+  * `api_get` automatically processes paginated responses to get all entities. Will return a list of entities or a single value based on API response
+  * `api_post` will automatically unwrap API response and result `result` or `results` value from API response.
+* Provider and Data Source names are now checked for invalid characters in create functions before API call. 
+
 ## v1.0.2
 * `CustomIdPProvider.users` and `CustomerIdPProvider.groups` dictionaries are now keyed by user/group identity (if provided) to prevent duplicate name collisions. To reference a user or group from the map after creation, use the "identity" value. If an identity is not provided, "name" is used for both identity and key.
 
 ## v1.0.1
-* Added support for resource unique identifier separte from `name`.
+* Added support for resource unique identifier separate from `name`.
   * `add_resource` and `add_sub_resource` functions allow new optional property `unique_id`
+  * `name` remains required but does not need to be unique for the entity type when using `unique_id`
   * When `unique_id` is provided it will serve as the key for the resource in the `.resources` and `.sub_resources` dictionaries
   * To use `unique_id` all resources must use `unique_id`
   * When using `unique_id` name does not need to be unique for a resource

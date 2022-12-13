@@ -1060,8 +1060,7 @@ class LocalRole():
         """
         if not isinstance(permissions, list):
             raise OAATemplateException("permissions must be list")
-        if not permissions:
-            raise OAATemplateException("permissions list cannot be empty")
+
         if not all(isinstance(r, str) for r in permissions):
             raise OAATemplateException("permissions must be names of permissions as strings")
 
