@@ -110,7 +110,7 @@ def test_client_data_source(veza_con):
     data_source_1_info = veza_con.get_data_source(name="data source 1", provider_id=provider_id)
     assert data_source_1_info is not None
     assert data_source_1_info.get("name") == "data source 1"
-    assert data_source_1_info.get("status") == "PENDING"
+    assert data_source_1_info.get("status") is not None
     assert data_source_1_info.get("id") is not None
 
     data_source_list = veza_con.get_data_sources(provider_id)

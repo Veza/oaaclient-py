@@ -2,9 +2,14 @@
 
 ## Running tests
 
-Tests are managed by `tox`. To run all tests invoke `tox` from the `ooaclient` directory
+Tests are managed by `pytest` and can be run locally by installing the package along with the test dependencies.
 
-By default `tox` with try to run python 3.8, 3.9 and 3.10, a coverage report and flake8 (exit-zero). You can run a single environment with `tox -e py38` for speed.
+```
+python3 -m venv venv
+pip install -e ".[test]"
+```
+
+To run the tests invoke the `pytest` command
 
 ### Testing with a Veza instance
 

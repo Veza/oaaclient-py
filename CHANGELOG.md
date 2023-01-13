@@ -1,5 +1,9 @@
 # OAA Client Change Log
 
+## v1.0.4
+* Added `__str__` and `__repr__` functions to the template classes to help with debugging and simplify printing log/status messages as needed.
+* IdP now supports nested groups. A group can be added to a parent group by using the `CustomIdPGroup.add_groups()` function.
+
 ## v1.0.3
 * Automatic API retries for connection errors
 * New exceptions `OAAResponseError`, `OAAConnectionError` that extend the base exception `OAAClientError`
@@ -8,7 +12,7 @@
 * Use new paging and filtering in Veza APIs to improve performance
   * `api_get` automatically processes paginated responses to get all entities. Will return a list of entities or a single value based on API response
   * `api_post` will automatically unwrap API response and result `result` or `results` value from API response.
-* Provider and Data Source names are now checked for invalid characters in create functions before API call. 
+* Provider and Data Source names are now checked for invalid characters in create functions before API call.
 
 ## v1.0.2
 * `CustomIdPProvider.users` and `CustomerIdPProvider.groups` dictionaries are now keyed by user/group identity (if provided) to prevent duplicate name collisions. To reference a user or group from the map after creation, use the "identity" value. If an identity is not provided, "name" is used for both identity and key.

@@ -17,8 +17,5 @@ def get_version() -> str:
 
 setup(
     name="oaaclient",
-    version=get_version(),
-    entry_points={
-        'console_scripts': ['oaaclient=oaaclient.client:main'],
-    }
+    version=get_version()
 )

@@ -24,9 +24,15 @@ test = [
 "homepage" = "https://github.com/veza/oaaclient-py"
 "repository" = "https://github.com/veza/oaaclient-py"
 
+[project.scripts]
+oaaclient = "oaaclient.client:main"
+
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["oaaclient"]
+
+[tool.pytest.ini_options]
+addopts = "-v --cov oaaclient --cov-report html --cov-report term"

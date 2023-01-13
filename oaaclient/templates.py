@@ -39,6 +39,8 @@ class OAAPermission(str, Enum):
     MetadataDelete = "MetadataDelete"
     NonData = "NonData"
 
+    def __repr__(self) -> str:
+        return f'{self.__class__.__name__}.{self.name}'
 
 class OAAIdentityType(str, Enum):
     """ Types of identities for permission mapping. """
@@ -47,6 +49,8 @@ class OAAIdentityType(str, Enum):
     LocalRole = "local_role"
     IdP = "idp"
 
+    def __repr__(self) -> str:
+        return f'{self.__class__.__name__}.{self.name}'
 
 class Provider():
     """Base class for CustomProvider. """
@@ -111,6 +115,12 @@ class CustomApplication(Application):
         self.custom_permissions = {}
 
         self.identity_to_permissions = {}
+
+    def __str__(self) -> str:
+        return f"Custom Application {self.name} - {self.application_type}"
+
+    def __repr__(self) -> str:
+        return f"CustomApplication(name={self.name!r}, application_type={self.application_type!r}, description={self.description!r})"
 
     def get_payload(self) -> dict:
         """Get the OAA payload.
@@ -504,6 +514,12 @@ class CustomResource():
 
         self.resource_permissions = {}
 
+    def __str__(self) -> str:
+        return f"Resource: {self.name} ({self.unique_id}) - {self.resource_type}"
+
+    def __repr__(self) -> str:
+        return f"CustomResource(name={self.name!r}, resource_type={self.resource_type!r}, unique_id={self.unique_id!r}, application_name={self.application_name!r}, resource_key={self.resource_key!r})"
+
     def to_dict(self) -> dict:
         """ Return the dictionary representation of resource."""
 
@@ -843,6 +859,12 @@ class LocalUser(Identity):
         self.deactivated_at = None
         self.password_last_changed_at = None
 
+    def __str__(self) -> str:
+        return f"Local User - {self.name} ({self.unique_id})"
+
+    def __repr__(self) -> str:
+        return f"LocalUser(name={self.name!r}, unique_id={self.unique_id!r}, identities={self.identities})"
+
     def add_identity(self, identity: str) -> None:
         """ Add an identity to user.
 
@@ -941,6 +963,12 @@ class LocalGroup(Identity):
         self.groups = []
         self.created_at = None
 
+    def __str__(self) -> str:
+        return f"Local Group - {self.name} ({self.unique_id})"
+
+    def __repr__(self) -> str:
+        return f"LocalGroup(name={self.name!r}, unique_id={self.unique_id!r}, identities={self.identities})"
+
     def add_group(self, group: str) -> None:
         """ Add user to local group (group must be created separately).
 
@@ -1002,6 +1030,12 @@ class IdPIdentity(Identity):
     def __init__(self, name: str) -> None:
         super().__init__(name, identity_type=OAAIdentityType.IdP)
 
+    def __str__(self) -> str:
+        return f"IdP Identity {self.name}"
+
+    def __repr__(self) -> str:
+        return f"IdPIdentity(name={self.name!r})"
+
     def set_property(self, property_name: str, property_value: any) -> None:
         """ Set custom IdP property (no functionality).
 
@@ -1050,6 +1084,12 @@ class LocalRole():
         self.property_definitions = property_definitions
         self.properties = {}
         self.tags = []
+
+    def __str__(self) -> str:
+        return f"Local Role - {self.name} ({self.unique_id})"
+
+    def __repr__(self) -> str:
+        return f"LocalRole(name={self.name!r}, permissions={self.permissions}, unique_id={self.unique_id!r})"
 
     def add_permissions(self, permissions: List[str]) -> None:
         """ Add a permission to the role.
@@ -1156,8 +1196,13 @@ class CustomPermission():
             self.resource_types = []
         self.__validate_permissions(permissions)
 
+    def __str__(self) -> str:
+        return f"Custom Permission {self.name} - {self.permission_type}"
 
-    def to_dict(self) -> None:
+    def __repr__(self) -> str:
+        return f"CustomPermissions(name={self.name!r}, permissions={self.permission_type}, apply_to_sub_resources={self.apply_to_sub_resources})"
+
+    def to_dict(self) -> dict:
         """ Returns dictionary representation for payload. """
         return {"name": self.name,
                 "permission_type": self.permission_type,
@@ -1242,6 +1287,12 @@ class ApplicationPropertyDefinitions():
         self.local_group_properties = {}
         self.local_role_properties = {}
         self.resource_properties = {}
+
+    def __str__(self) -> str:
+        return f"ApplicationPropertyDefinitions for {self.application_type}"
+
+    def __repr__(self) -> str:
+        return f"ApplicationPropertyDefinitions(application_type={self.application_type!r})"
 
     def to_dict(self) -> dict:
         """ Return property definitions as dictionary ready for OAA payload """
@@ -1427,6 +1478,12 @@ class CustomIdPProvider():
         self.users = {}
         self.groups = {}
 
+    def __str__(self) -> str:
+        return f"Custom IdP Provider {self.name} - {self.idp_type}"
+
+    def __repr__(self) -> str:
+        return f"CustomIdPProvider(name={self.name!r}, idp_type={self.idp_type!r}, domain={self.domain!r}, description={self.description!r})"
+
     def get_payload(self) -> dict:
         """ Return formatted payload as dictionary for JSON conversion and upload """
         payload = {}
@@ -1505,6 +1562,12 @@ class CustomIdPDomain():
         self.__properties = {}
         self.__property_definitions = property_definitions
 
+    def __str__(self) -> str:
+        return f"Custom IdP Domain {self.name}"
+
+    def __repr__(self) -> str:
+        return f"CustomIdPDomain(name={self.name!r})"
+
     def to_dict(self) -> dict:
         """ Output function for payload. """
         domain = {}
@@ -1578,6 +1641,12 @@ class CustomIdPUser():
         self.__tags = []
         self.__properties = {}
         self.__property_definitions = property_definitions
+
+    def __str__(self) -> str:
+        return f"IdP User - {self.name} ({self.identity})"
+
+    def __repr__(self) -> str:
+        return f"CustomIdPUser(name={self.name!r}, email={self.email!r}, full_name={self.full_name!r}, identity={self.identity!r})"
 
     def to_dict(self) -> dict:
         """ Function to prepare user entity for payload """
@@ -1705,10 +1774,17 @@ class CustomIdPGroup():
 
         self.is_security_group = None
 
+        self.__groups = {}
         self.__assumed_roles = {}
         self.__tags = []
         self.__properties = {}
         self.__property_definitions = property_definitions
+
+    def __str__(self) -> str:
+        return f"IdP Group {self.name} ({self.identity})"
+
+    def __repr__(self) -> str:
+        return f"CustomIdPGroup(name={self.name!r}, full_name={self.full_name!r}, identity={self.identity!r})"
 
     def to_dict(self) -> None:
         """ Function to prepare user entity for payload. """
@@ -1723,6 +1799,7 @@ class CustomIdPGroup():
         group['full_name'] = self.full_name
         group['is_security_group'] = self.is_security_group
         group['assumed_role_arns'] = [r for r in self.__assumed_roles.values()]
+        group['groups'] = [g for g in self.__groups.values()]
 
         group['tags'] = self.__tags
         group['custom_properties'] = self.__properties
@@ -1743,6 +1820,27 @@ class CustomIdPGroup():
         for arn in arns:
             if arn not in self.__assumed_roles:
                 self.__assumed_roles[arn] = {"identity": arn}
+
+        return
+
+    def add_groups(self, group_identities: List[str]) -> None:
+        """ Add group to group(s) by group name
+
+        Adds current group to another parent group by the group identifier
+
+        Args:
+            group_identities (list): list of strings for group identities to add group to
+
+        """
+
+        if not isinstance(group_identities, list):
+            raise OAATemplateException("group_identities must be list")
+
+        for group_identity in group_identities:
+            if (self.identity and group_identity == self.identity) or (not self.identity and group_identity == self.name):
+                raise OAATemplateException(f"Cannot add a group to itself '{group_identity}'")
+            if group_identity not in self.__groups:
+                self.__groups[group_identity] = {"identity": group_identity}
 
         return
 
@@ -1791,6 +1889,12 @@ class IdPPropertyDefinitions():
         self.domain_properties = {}
         self.user_properties = {}
         self.group_properties = {}
+
+    def __str__(self) -> str:
+        return f"IdP Property Definitions"
+
+    def __repr__(self) -> str:
+        return f"IdPPropertyDefinitions()"
 
     def to_dict(self) -> dict:
         """ Returns custom IdP property definitions. """
@@ -1898,6 +2002,15 @@ class Tag():
             raise OAATemplateException(f"Invalid characters in tag key {self.key}: may only contain letters, numbers, whitespace and _ (underscore)")
         if self.value != "" and not re.match(r"^[\w\d\s_,@\.-]+$", self.value):
             raise OAATemplateException(f"Invalid characters in tag value {self.value}: may only contain letters, numbers, whitespace and the special characters @,._-")
+
+    def __str__(self) -> str:
+        if self.value:
+            return f"Tag {self.key}:{self.value}"
+        else:
+            return f"Tag {self.key}"
+
+    def __repr__(self) -> str:
+        return f"Tag(key={self.key!r}, value={self.value!r})"
 
     def __eq__(self, o):
         if self.key == o.key and self.value == o.value:

@@ -93,6 +93,17 @@ def test_custom_idp_exceptions():
         test_user.set_source_identity("bob", "somestring")
     assert e.value.message == "provider_type must be IdPProviderType enum"
 
+    test_group = idp.add_group(name="test")
+    with pytest.raises(OAATemplateException) as e:
+      test_group.add_groups(["test"])
+
+    assert e.value.message == "Cannot add a group to itself 'test'"
+
+    test_group2 = idp.add_group(name="test", identity="test2")
+    with pytest.raises(OAATemplateException) as e:
+      test_group2.add_groups(["test2"])
+
+    assert e.value.message == "Cannot add a group to itself 'test2'"
 
 # expected paylods
 TEST_CUSTOM_IDP_RESULT = """
@@ -206,6 +217,7 @@ TEST_CUSTOM_IDP_RESULT = """
       "full_name": null,
       "is_security_group": null,
       "assumed_role_arns": [],
+      "groups": [],
       "tags": [],
       "custom_properties": {}
     },
@@ -215,6 +227,7 @@ TEST_CUSTOM_IDP_RESULT = """
       "full_name": null,
       "is_security_group": null,
       "assumed_role_arns": [],
+      "groups": [],
       "tags": [],
       "custom_properties": {}
     },
@@ -224,6 +237,7 @@ TEST_CUSTOM_IDP_RESULT = """
       "full_name": null,
       "is_security_group": null,
       "assumed_role_arns": [],
+      "groups": [],
       "tags": [],
       "custom_properties": {}
     }

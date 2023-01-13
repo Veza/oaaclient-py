@@ -99,6 +99,9 @@ def generate_app():
     group3.add_group("group2")
     app.local_users["rob"].add_group("group3")
 
+    # idp identities
+    idp_user1 = app.add_idp_identity("user01@example.com")
+
     # roles
     app.property_definitions.define_local_role_property("role_id", OAAPropertyType.NUMBER)
     app.property_definitions.define_local_role_property("custom", OAAPropertyType.BOOLEAN)
@@ -144,6 +147,8 @@ def generate_app():
     app.local_groups["group2"].add_role("role2", resources=[thing1])
     app.local_users["marry"].add_permission("view", resources=[thing2, cog1])
     app.local_users["rob"].add_permission("manage", resources=[thing1], apply_to_application=True)
+
+    app.idp_identities["user01@example.com"].add_role("role1", apply_to_application=True)
 
     return app
 
@@ -520,6 +525,18 @@ GENERATED_APP_PAYLOAD = """
           "resources": [
             "thing1"
           ]
+        }
+      ]
+    },
+    {
+      "identity": "user01@example.com",
+      "identity_type": "idp",
+      "role_assignments": [
+        {
+          "application": "pytest generated app",
+          "role": "role1",
+          "apply_to_application": true,
+          "resources": []
         }
       ]
     }

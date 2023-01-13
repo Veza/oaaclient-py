@@ -8,7 +8,7 @@ https://opensource.org/licenses/MIT.
 
 import os
 import pytest
-import uuid
+import re
 import time
 
 from oaaclient.client import OAAClient, OAAClientError
@@ -21,6 +21,8 @@ from generate_app_id_mapping import generate_app_id_mapping
 # set the timeout for the push tests, if the the datasource does not parse
 TEST_TIMEOUT = os.getenv("OAA_PUSH_TIMEOUT", 300)
 
+# REGEX for matching failure data source parsing messages for fast failing tests
+FAILURE_REGEX = re.compile(r"fail|error", re.IGNORECASE)
 
 @pytest.mark.skipif(not os.getenv("PYTEST_VEZA_HOST"), reason="Test host is not configured")
 @pytest.mark.timeout(TEST_TIMEOUT)
@@ -45,7 +47,7 @@ def test_payload_push(veza_con, app_provider):
     assert "warnings" in response
     # since our payload includes fake identities expect warnings about not matching identities
     assert response["warnings"] is not None
-    assert len(response["warnings"]) == 5
+    assert len(response["warnings"]) == 6
     for warning in response["warnings"]:
         if "Role is missing permission" in warning.get("message", ""):
             pass
@@ -57,13 +59,13 @@ def test_payload_push(veza_con, app_provider):
     data_source = veza_con.get_data_source(data_source_name, provider_id=app_provider["id"])
     while True:
         data_source = veza_con.get_data_source(data_source_name, provider_id=app_provider["id"])
-        if data_source["status"] == "PENDING":
-            time.sleep(4)
-        elif data_source["status"] == "SUCCESS":
+        if data_source["status"] == "SUCCESS":
             break
-        else:
+        elif FAILURE_REGEX.match(data_source["status"]):
             print(data_source)
             assert False, "Datasource parsing failure"
+        else:
+            time.sleep(4)
 
 
 @pytest.mark.skipif(not os.getenv("PYTEST_VEZA_HOST"), reason="Test host is not configured")
@@ -88,7 +90,7 @@ def test_payload_push_compressed(veza_con, app_provider):
     assert "warnings" in response
     # since our payload includes fake identities expect warnings about not matching identities
     assert response["warnings"] is not None
-    assert len(response["warnings"]) == 5
+    assert len(response["warnings"]) == 6
     for warning in response["warnings"]:
         if "Role is missing permission" in warning.get("message", ""):
             pass
@@ -100,13 +102,13 @@ def test_payload_push_compressed(veza_con, app_provider):
     data_source = veza_con.get_data_source(data_source_name, provider_id=app_provider["id"])
     while True:
         data_source = veza_con.get_data_source(data_source_name, provider_id=app_provider["id"])
-        if data_source["status"] == "PENDING":
-            time.sleep(4)
-        elif data_source["status"] == "SUCCESS":
+        if data_source["status"] == "SUCCESS":
             break
-        else:
+        elif FAILURE_REGEX.match(data_source["status"]):
             print(data_source)
             assert False, "Datasource parsing failure"
+        else:
+            time.sleep(4)
 
 
 
@@ -145,13 +147,13 @@ def test_payload_push_id_mapping(veza_con, app_provider):
     data_source = veza_con.get_data_source(data_source_name, provider_id=app_provider["id"])
     while True:
         data_source = veza_con.get_data_source(data_source_name, provider_id=app_provider["id"])
-        if data_source["status"] == "PENDING":
-            time.sleep(4)
-        elif data_source["status"] == "SUCCESS":
+        if data_source["status"] == "SUCCESS":
             break
-        else:
+        elif FAILURE_REGEX.match(data_source["status"]):
             print(data_source)
             assert False, "Datasource parsing failure"
+        else:
+            time.sleep(4)
 
 
 @pytest.mark.skipif(not os.getenv("PYTEST_VEZA_HOST"), reason="Test host is not configured")
@@ -197,12 +199,12 @@ def test_idp_payload_push(veza_con, idp_provider):
 
     while True:
         data_source = veza_con.get_data_source(data_source_name, provider_id=idp_provider["id"])
-        if data_source["status"] == "PENDING":
-            time.sleep(2)
-        elif data_source["status"] == "SUCCESS":
+        if data_source["status"] == "SUCCESS":
             break
-        else:
+        elif FAILURE_REGEX.match(data_source["status"]):
             print(data_source)
             assert False, "Datasource parsing failure"
+        else:
+            time.sleep(4)
 
     return
