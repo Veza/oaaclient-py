@@ -1,5 +1,20 @@
 # OAA Client Change Log
 
+## v1.1.0
+* New functions in `OAAClient` for managing Veza Queries and Reports. See function doc strings for usage.
+  * `get_queries`
+  * `get_query_by_id`
+  * `create_query`
+  * `delete_query`
+  * `get_reports`
+  * `get_report_by_id`
+  * `create_report`
+  * `update_report`
+  * `add_query_report`
+  * `delete_report`
+* New `utils` method `build_report` to populate a Veza Report and Quires from a dictionary containing the report and query definitions. See function docstring for more details.
+* Package provides new CLI command `oaaclient-report-builder` to load a report file directory from JSON file from the command line.
+
 ## v1.0.4
 * Added `__str__` and `__repr__` functions to the template classes to help with debugging and simplify printing log/status messages as needed.
 * IdP now supports nested groups. A group can be added to a parent group by using the `CustomIdPGroup.add_groups()` function.

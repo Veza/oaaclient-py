@@ -697,3 +697,130 @@ def test_allowed_characters():
         provider = veza_con.create_provider("allowed 1234 @#$%&*:()!,_'\" =.-", "application")
 
     assert provider == {}
+
+
+@pytest.mark.skipif(not os.getenv("PYTEST_VEZA_HOST"), reason="Test host is not configured")
+def test_create_query(veza_con):
+    """Test the methods for managing queries """
+
+    existing_queries = veza_con.get_queries()
+
+    assert isinstance(existing_queries, list)
+    starting_count = len(existing_queries)
+
+    query_name_uuid = uuid.uuid4()
+    test_query = {
+                    "name": f"Pytest test query {query_name_uuid}",
+                    "description": "Pytest Generated",
+                    "category": "IDP_ANALYSIS",
+                    "level": "BASIC",
+                    "result_type": "NUMBER",
+                    "query_type": "SOURCE_TO_DESTINATION",
+                    "source_node_types": {
+                        "nodes": [
+                            {
+                                "node_type": "OktaUser",
+                                "tags": [],
+                                "conditions": [],
+                                "node_id": "",
+                                "excluded_tags": [],
+                                "count_conditions": []
+                            }
+                        ],
+                        "nodes_operator": "AND"
+                    }
+                }
+
+    create_response = veza_con.create_query(test_query)
+    assert isinstance(create_response, dict)
+    created_id = create_response["id"]
+    assert created_id is not None
+
+    get_response = veza_con.get_query_by_id(created_id)
+    assert isinstance(get_response, dict)
+    assert get_response['id'] == created_id
+
+    delete_response = veza_con.delete_query(created_id)
+    assert isinstance(delete_response, dict)
+
+    with pytest.raises(OAAResponseError) as e:
+        veza_con.get_query_by_id(created_id)
+
+    assert e.value is not None
+    assert e.value.status_code == 404
+
+@pytest.mark.skipif(not os.getenv("PYTEST_VEZA_HOST"), reason="Test host is not configured")
+def test_create_report(veza_con):
+    """Test the methods for managing reports """
+
+    existing_reports = veza_con.get_reports()
+    assert isinstance(existing_reports, list)
+    starting_count = len(existing_reports)
+
+    report_name_uuid = uuid.uuid4()
+
+    report_definition = { "name": f"Pytest Report {report_name_uuid}", "description": "Created for Pytest", "category": "OAA", "queries": []}
+
+    create_response = veza_con.create_report(report=report_definition)
+    assert isinstance(create_response, dict)
+    created_id = create_response.get("id")
+    assert created_id is not None
+
+    get_response = veza_con.get_report_by_id(id=created_id)
+    assert isinstance(get_response, dict)
+    assert get_response["id"] == created_id
+    assert len(get_response["queries"]) == 0
+
+    query_name_uuid = uuid.uuid4()
+    test_query = {
+                    "name": f"Pytest test query {query_name_uuid}",
+                    "description": "Pytest Generated",
+                    "category": "IDP_ANALYSIS",
+                    "level": "BASIC",
+                    "result_type": "NUMBER",
+                    "query_type": "SOURCE_TO_DESTINATION",
+                    "source_node_types": {
+                        "nodes": [
+                            {
+                                "node_type": "OktaUser",
+                                "tags": [],
+                                "conditions": [],
+                                "node_id": "",
+                                "excluded_tags": [],
+                                "count_conditions": []
+                            }
+                        ],
+                        "nodes_operator": "AND"
+                    }
+                }
+
+    query_create_response = veza_con.create_query(test_query)
+    query_id = query_create_response["id"]
+
+    add_response = veza_con.add_query_report(report_id=created_id, query_id=query_id)
+    log.debug(add_response)
+    assert len(add_response["queries"]) == 1
+
+    add_response = veza_con.add_query_report(report_id=created_id, query_id=query_id)
+    log.debug(add_response)
+
+    assert len(add_response["queries"]) == 1
+
+    get_response = veza_con.get_report_by_id(id=created_id, include_inactive_queries=True)
+    assert isinstance(get_response, dict)
+    assert get_response["id"] == created_id
+    log.debug(get_response)
+    assert len(get_response["queries"]) == 1
+
+    get_response["name"] = f"Updated Pytest {query_name_uuid}"
+    update_response = veza_con.update_report(report_id=created_id, report=get_response)
+    log.debug(update_response)
+    assert update_response["name"] == f"Updated Pytest {query_name_uuid}"
+
+    delete_response = veza_con.delete_report(created_id)
+    assert isinstance(delete_response, dict)
+
+    with pytest.raises(OAAResponseError) as e:
+        veza_con.get_report_by_id(created_id)
+
+    veza_con.delete_query(query_id)

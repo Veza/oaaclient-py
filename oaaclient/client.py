@@ -103,6 +103,9 @@ class OAAClient():
     DEFAULT_PAGE_SIZE = 250
 
     def __init__(self, url:str, api_key: str = None, username: str = None, token: str = None):
+        if not url:
+            raise ValueError("Must provide url argument")
+
         if not re.match(r"^https:\/\/.*", url):
             self.url = f"https://{url}"
         else:
@@ -439,6 +442,147 @@ class OAAClient():
         metadata = application_object.get_payload()
         return self.push_metadata(provider_name, data_source_name, metadata, save_json=save_json)
 
+    def get_queries(self, include_inactive_queries:bool = True) -> list[dict]:
+        """Get all saved Assessment Queries
+
+        Veza can filter out queries that include inactive entity types (e.g. Okta Users on a system without Okta configured).
+        To only retrieve queries that include active entity types set `include_inactive_queries` to False.
+
+        Args:
+            include_inactive_queries (bool): Set False to exclude inactive queries from result. Defaults to True.
+
+        Returns:
+            list: List of assessment Queries as dictionaries
+        """
+
+        params = {}
+        params["include_inactive_queries"] = include_inactive_queries
+        params["page_size"] = self.DEFAULT_PAGE_SIZE
+
+        return self.api_get("/api/v1/assessments/queries", params=params)
+
+    def get_query_by_id(self, id: str) -> dict:
+        """Get Assessment Query by ID
+
+        Args:
+            id (str): UUID identifier for Query
+
+        Returns:
+            dict: Query definition
+        """
+
+        return self.api_get(f"/api/v1/assessments/queries/{id}")
+
+    def create_query(self, query: dict) -> dict:
+        """Create a new Assessment Query
+
+        For details on how to define an Assessment Query see the Veza docs.
+
+        Args:
+            query (dict): Query definition
+
+        Returns:
+            dict: API response including ID of created Query
+        """
+
+        return self.api_post("/api/v1/assessments/queries", data=query)
+
+    def delete_query(self, id: str, force: bool = False) -> dict:
+        """Delete an Assessment Query by ID
+
+        Args:
+            id (str): UUID of Query to delete
+            force (bool): Force deletion of query that may be part of a report. Defaults to False
+
+        Returns:
+            dict: API response from delete
+        """
+
+        params = {"force": force}
+        return self.api_delete(f"/api/v1/assessments/queries/{id}", params)
+
+    def get_reports(self) -> list[dict]:
+        """Get all Reports
+
+        Gets all created Reports on the system
+
+        Returns:
+            list[dict]: List of Reports as dictionary objects
+        """
+
+        return self.api_get("/api/preview/assessments/reports",  params={"page_size": self.DEFAULT_PAGE_SIZE})
+
+    def get_report_by_id(self, id: str, include_inactive_queries: bool = True) -> dict:
+        """Get Report by ID
+
+        Veza can filter out queries from reports that only contain entity types that are not configured (e.g. Okta
+        Users on a system without Okta configured). To only return queries configured on the report that match entity
+        types configured on the system set `include_inactive_queries` to `False`
+
+        Args:
+            id (str): UUID of Report to get
+            include_inactive_queries (bool): Set True to include inactive queries. Default True.
+        Returns:
+            dict: Report definition
+        """
+
+        params = {"include_inactive_queries": include_inactive_queries}
+        return self.api_get(f"/api/preview/assessments/reports/{id}", params=params)
+
+    def create_report(self, report: dict) -> dict:
+        """Create a new Report
+
+        For details on how to define a new Report see the Veza docs.
+
+        Args:
+            report (dict): Report definition
+
+        Returns:
+            dict: API response including ID of created Report
+        """
+
+        return self.api_post("/api/preview/assessments/reports", data=report)
+
+    def update_report(self, report_id: str, report: dict) -> dict:
+        """Update an existing report
+
+        Args:
+            report_id (str): UUID of Report to updated
+            report (dict): Updated Report definition
+
+        Returns:
+            dict: API response
+        """
+
+        return self.api_put(f"/api/preview/assessments/reports/{report_id}", data=report)
+
+    def add_query_report(self, report_id: str, query_id: str) -> dict:
+        """Add a Query to a Report
+
+        Adds a Query to an existing Report by ID
+
+        Args:
+            report_id (str): Report UUID to add Query to
+            query_id (str): Query UUID to add
+
+        Returns:
+            dict: API Response
+        """
+
+        return self.api_put(f"/api/preview/assessments/reports/{report_id}/queries/{query_id}", data=None)
+
+    def delete_report(self, id: str) -> dict:
+        """Delete Report by ID
+
+        Args:
+            id (str): UUID of Report to delete
+
+        Returns:
+            dict: API response
+        """
+
+        return self.api_delete(f"/api/preview/assessments/reports/{id}")
+
     def api_get(self, api_path: str, params: dict = None) -> list|dict:
         """Perform Veza API GET operation.
 
@@ -517,7 +661,36 @@ class OAAClient():
         else:
             return result
 
-    def api_delete(self, api_path:str) -> dict:
+    def api_put(self, api_path: str, data: dict) -> dict:
+        """Perform Veza API PUT operation.
+
+        Call PUT on the supplied Veza instance API path, including the data payload.
+
+        Returns `value` or `values` response from API result.
+
+        Args:
+            api_path (str): API path relative to Veza URL example `/api/v1/providers`
+            data (dict): dictionary object included as JSON in body of PUT operation
+
+        Raises:
+            OAAResponseError: API returned an error
+            OAAConnectionError: Connection error during HTTP operation
+
+        Returns:
+            dict: API response as dictionary
+        """
+
+        result = self._perform_request(method="PUT", api_path=api_path, data=data)
+
+        # unwrap response and return result
+        if "values" in result:
+            return result["values"]
+        elif "value" in result:
+            return result["value"]
+        else:
+            return result
+
+    def api_delete(self, api_path:str, params: dict = None) -> dict:
         """Perform REST API DELETE operation.
 
         Args:
@@ -530,7 +703,7 @@ class OAAClient():
         Returns:
             dict: API response from call
         """
-        return self._perform_request(method="DELETE", api_path=api_path)
+        return self._perform_request(method="DELETE", api_path=api_path, params=params)
 
     def _perform_request(self, method: str, api_path: str, data: dict = None, params: dict = None) -> dict:
         """Perform HTTP request
@@ -638,6 +811,57 @@ class OAARetry(Retry):
     def __init__(self, backoff_max=30, **kwargs) -> None:
         super(OAARetry, self).__init__(**kwargs)
         self.DEFAULT_BACKOFF_MAX = backoff_max
+
+
+def report_builder_entrypoint() -> None:
+    """Entry point for `oaaclient-report-builder` command
+
+    Reads a JSON file and passes it to the `oaaclient.utils.build_report` method
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--host", default=os.getenv("VEZA_URL"), help="URL endpoint for Veza Deployment")
+    parser.add_argument("report_file", help="Path to source report file")
+    args = parser.parse_args()
+
+    # setup a log handler
+    log = logging.getLogger()
+    logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.INFO)
+
+    report_file = args.report_file
+    if not os.path.isfile(report_file):
+        log.error(f"Unable to locate source file at path {report_file}")
+        sys.exit(1)
+    try:
+        report_definition = oaautils.load_json_from_file(report_file)
+    except Exception as e:
+        log.error(e)
+        sys.exit(1)
+
+    veza_url = args.host
+    veza_api_key = os.getenv("VEZA_API_KEY", "")
+    if not veza_url:
+        oaautils.log_arg_error(log, "--host", "VEZA_URL")
+    if not veza_api_key:
+        oaautils.log_arg_error(log, None, "VEZA_API_KEY")
+    if not veza_url and veza_api_key:
+        sys.exit(1)
+
+    vezacon = OAAClient(veza_url, api_key=veza_api_key)
+
+    log.info(f"Loading report from {report_file}")
+    try:
+        oaautils.build_report(vezacon, report_definition=report_definition)
+    except OAAResponseError as e:
+        log.error("Veza API error encounter building report")
+        log.error(e, e.details)
+        sys.exit(1)
+    except Exception as e:
+        log.error("Error building report")
+        log.error(e)
+        sys.exit(1)
+
+    log.info("Finished")
+    return
 
 
 def main():
