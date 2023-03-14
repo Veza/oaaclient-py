@@ -18,9 +18,10 @@ import gzip
 import json
 import logging
 import os
-import socket
 import re
+import socket
 import sys
+import urllib.parse
 from datetime import datetime
 from enum import Enum
 
@@ -28,7 +29,6 @@ import requests
 from requests.adapters import HTTPAdapter
 from requests.exceptions import JSONDecodeError as RequestsJSONDecodeError
 from urllib3.util.retry import Retry
-from urllib.parse import urlsplit, urlencode
 
 import oaaclient.utils as oaautils
 from oaaclient.templates import CustomApplication, CustomIdPProvider
@@ -63,26 +63,33 @@ class OAAClientError(Exception):
 class OAAResponseError(OAAClientError):
     """ Error returned from API Call"""
 
+    def __init__(self, *args, **kwargs):
+
+        self.request_id = kwargs.pop("request_id", None)
+        self.timestamp = kwargs.pop("timestamp", None)
+        super().__init__(*args, **kwargs)
+        return
+
 class OAAConnectionError(OAAClientError):
     """ Error with API Connection"""
 
 class OAAClient():
-    """OAA API Connection and Management.
+    """Class for OAA API Connection and Management.
 
-    Tools for making the API calls to Veza for OAA related operations. Manages Providers, Datasources and can push OAA
-    payloads from JSON or template apps.
+    Utilities for OAA-related operations with Veza API calls. Manages custom providers and datasources, and can push OAA
+    payloads from JSON or template objects.
 
     Args:
         url (str): URL for Veza instance.
         api_key (str): Veza API key.
         username (str, optional): Not used (legacy). Defaults to None.
-        token (str, optional): legacy parameter name for API key. Defaults to None.
-        skip_validation (bool, optional): skip test API call to validate host and credentials. Defaults to False.
+        token (str, optional): Legacy parameter name for API key. Defaults to None.
+        skip_validation (bool, optional): Skip test API call to validate host and credentials. Defaults to False.
 
     Attributes:
         url (str): URL of the Veza instance to connect to
         api_key (str): Veza API key
-        enable_compression (bool): Enable/disable compression of the OAA payload during push, defaults to enabled (True)
+        enable_compression (bool): Enable or disable compression of the OAA payload during push, defaults to enabled (True)
 
     Raises:
         OAAClientError: For errors connecting to API and if API returns errors
@@ -186,10 +193,10 @@ class OAAClient():
         return provider
 
     def get_provider_by_id(self, provider_id: str) -> dict:
-        """Get provider by UUID identifier.
+        """Get Provider by UUID identifier.
 
         Args:
-            provider_id (str): Unique UUID identifier for provider
+            provider_id (str): Unique global identifier for provider
 
         Returns:
             dict: dictionary representation of Provider or None
@@ -208,11 +215,11 @@ class OAAClient():
     def create_provider(self, name: str, custom_template: str, base64_icon: str = None) -> dict:
         """Create a new Provider.
 
-        Creates a new Provider with the given name. An error will be raised in there is Provider naming conflict
+        Creates a new Provider with the given name. An error will be raised for naming conflicts.
 
         Args:
             name (str): new Provider name
-            custom_template (str): the OAA template to use for the Provider (e.g. "application")
+            custom_template (str): the OAA template to use for the Provider ("application" or "identity_provider")
             base64_icon (str, optional): Base64 encoded string of icon to set for Provider. Defaults to None.
 
         Raises:
@@ -232,9 +239,9 @@ class OAAClient():
         return provider
 
     def update_provider_icon(self, provider_id: str, base64_icon: str) -> None:
-        """ Update an existing provider's icon from base64 encoded string.
+        """ Update an existing custom provider icon from base64 encoded string.
 
-        To load icon from file use `utils.encode_icon_file` to get the base64 encoding of the file first
+        To load an icon from file,  use `utils.encode_icon_file` to get the base64 encoding of the file first
 
         Args:
             provider_id (str): unique ID of existing provider
@@ -258,14 +265,14 @@ class OAAClient():
     def delete_provider(self, provider_id: str) -> dict:
         """Delete an existing provider by ID.
 
-        Deleting a provider will delete all its datasources and historical data. Deleting a provider is a background operation that will
-        complete after API response is returned.
+        Deleting a provider removes all datasources and historical data.
+        Fully deleting the provider is a background operation that will complete after API response is returned.
 
         Args:
             provider_id (str): ID of provider to delete
 
         Returns:
-            dict: response from API
+            dict: API response
         """
         response = self.api_delete(f"/api/v1/providers/custom/{provider_id}")
         return response
@@ -278,6 +285,7 @@ class OAAClient():
 
         Args:
             provider_id (str): ID of Provider
+
         Returns:
             list[dict]: List of Data Sources as dictionaries
         """
@@ -298,7 +306,7 @@ class OAAClient():
             dict: Data Source as dict or None
         """
 
-        filter = {"filter": f"name+eq+\"{name}\""}
+        filter = {"filter": f"name eq \"{name}\""}
         response = self.api_get(f"/api/v1/providers/custom/{provider_id}/datasources", params=filter)
 
         # expect a list of one or empty
@@ -334,19 +342,19 @@ class OAAClient():
         return self.api_post(f"/api/v1/providers/custom/{provider_id}/datasources", data=data_source)
 
     def create_datasource(self, name, provider_id):
-        """ Legacy function for backwards compatibility
-        ..Deprecated::
+        """
+        **Deprecated** Legacy function for backward-compatibility.
         """
         return self.create_data_source(name, provider_id)
 
     def delete_data_source(self, data_source_id: str, provider_id: str) -> dict:
-        """Delete existing Data Source by ID.
+        """Delete an existing Data Source by ID.
 
-        Deleting a Data Source will delete all entity data from the Data Source
+        Removes a Data Source and all entity data.
 
         Args:
             data_source_id (str): ID of Data Source to delete
-            provider_id (str): ID of Provider for Data Source
+            provider_id (str): ID of Data Source Provider
 
         Returns:
             dict: API response
@@ -358,11 +366,8 @@ class OAAClient():
         """Push an OAA payload dictionary to Veza.
 
         Publishes the supplied `metadata` dictionary representing an OAA payload to the specified provider and
-        data source. The function will create a new data source if it does not already exist, but requires the Provider to be
+        data source. The function will create a new data source if it does not already exist, but requires the Provider be
         created ahead of time.
-
-        Optional flag `save_json` will write the payload to a local file before push for log or debug. Output file name
-        will be a timestamped file of the format `{data source name}-{%Y%m%d-%H%M%S}.json`
 
         Args:
             provider_name (str): Name of existing Provider
@@ -374,7 +379,7 @@ class OAAClient():
             OAAClientError: If any API call returns an error including errors processing the OAA payload.
 
         Returns:
-            dict: API response from push including any warnings if returned.
+            dict: API response to the push request (including any warnings).
         """
 
         provider = self.get_provider(provider_name)
@@ -418,13 +423,13 @@ class OAAClient():
     def push_application(self, provider_name: str, data_source_name: str, application_object: CustomApplication|CustomIdPProvider, save_json=False) -> dict:
         """Push an OAA Application Object (such as CustomApplication).
 
-        Extract the OAA JSON payload from the supplied OAA class (e.g. CustomApplication, CustomIdPProvider) and push to
+        Extracts the OAA JSON payload from the supplied OAA class (e.g. CustomApplication, CustomIdPProvider) and push to
         the supplied Data Source.
 
         The Provider must be a valid Provider (created ahead of time). A new data source will be created
         if it does not already exist.
 
-        Optional flag `save_json` will write the payload to a local file before push for log or debug. Output file name
+        For logging, and debugging, the optional `save_json` flag writes the payload to a local file (before push). Output file name
         is formatted with a timestamp: `{data source name}-{%Y%m%d-%H%M%S}.json`
 
         Args:
@@ -501,16 +506,26 @@ class OAAClient():
         params = {"force": force}
         return self.api_delete(f"/api/v1/assessments/queries/{id}", params)
 
-    def get_reports(self) -> list[dict]:
+    def get_reports(self, include_inactive_reports: bool = True, include_inactive_queries: bool = True) -> list[dict]:
         """Get all Reports
 
-        Gets all created Reports on the system
+        Gets Reports created on the system. To get all reports `include_inactive_reports` and `include_inactive_queries` must be set
+        to True.
+
+        Args:
+            include_inactive_reports (bool, Optional): Set to True to include reports that contain no active providers, defaults to True.
+            include_inactive_queries (bool, Optional): Set to True to include reports that contain only inactive queries, defaults to True.
 
         Returns:
             list[dict]: List of Reports as dictionary objects
         """
 
-        return self.api_get("/api/preview/assessments/reports",  params={"page_size": self.DEFAULT_PAGE_SIZE})
+        params = {}
+        params["include_inactive_reports"] = include_inactive_reports
+        params["include_inactive_queries"] = include_inactive_queries
+        params["page_size"] = self.DEFAULT_PAGE_SIZE
+
+        return self.api_get("/api/preview/assessments/reports", params=params)
 
     def get_report_by_id(self, id: str, include_inactive_queries: bool = True) -> dict:
         """Get Report by ID
@@ -584,7 +599,7 @@ class OAAClient():
         return self.api_delete(f"/api/preview/assessments/reports/{id}")
 
     def api_get(self, api_path: str, params: dict = None) -> list|dict:
-        """Perform Veza API GET operation.
+        """Perform a Veza API GET operation.
 
         Makes the GET API call to the given path and processes the API response. Returns the `value` or `values` result
         returned from the API.
@@ -632,16 +647,18 @@ class OAAClient():
 
         return result
 
-    def api_post(self, api_path: str, data: dict) -> dict:
-        """Perform Veza API POST operation.
+    def api_post(self, api_path: str, data: dict, params: dict = None) -> list|dict:
+        """Perform a Veza API POST operation.
 
-        Call POST on the supplied Veza instance API path, including the data payload.
+        Call POST on the supplied Veza instance API path, submitting a data payload.
 
-        Returns `value` or `values` response from API result.
+        Returns `value` or `values` response from API result. Paginated responses are automatically processed to
+        collect all responses a single list.
 
         Args:
             api_path (str): API path relative to Veza URL example `/api/v1/providers`
             data (dict): dictionary object included as JSON in body of POST operation
+            params (dict, optional): Optional HTTP query parameters. Defaults to empty dictionary.
 
         Raises:
             OAAResponseError: API returned an error
@@ -651,26 +668,44 @@ class OAAClient():
             dict: API response as dictionary
         """
 
-        result = self._perform_request(method="POST", api_path=api_path, data=data)
+        if not params:
+            params = {}
 
-        # unwrap response and return result
-        if "values" in result:
-            return result["values"]
-        elif "value" in result:
-            return result["value"]
-        else:
-            return result
+        result = []
+        while True:
+            response = self._perform_request(method="POST", api_path=api_path, data=data, params=params)
 
-    def api_put(self, api_path: str, data: dict) -> dict:
+
+            if "values" in response:
+                # paginated response,
+                result.extend(response.get("values", []))
+                if response.get("has_more"):
+                    params["page_token"] = response.get("next_page_token")
+                else:
+                    # no more pages
+                    break
+            elif "value" in response:
+                # singular API response, set return value to response value
+                result = response["value"]
+                break
+            else:
+                # unexpected API response, just return the result
+                return response
+
+        return result
+
+    def api_put(self, api_path: str, data: dict, params: dict = None) -> list|dict:
         """Perform Veza API PUT operation.
 
         Call PUT on the supplied Veza instance API path, including the data payload.
 
-        Returns `value` or `values` response from API result.
+        Returns `value` or `values` response from API result. Paginated responses are automatically processed to
+        collect all responses a single list.
 
         Args:
             api_path (str): API path relative to Veza URL example `/api/v1/providers`
             data (dict): dictionary object included as JSON in body of PUT operation
+            params (dict, optional): Optional HTTP query parameters. Defaults to empty dictionary.
 
         Raises:
             OAAResponseError: API returned an error
@@ -680,15 +715,30 @@ class OAAClient():
             dict: API response as dictionary
         """
 
-        result = self._perform_request(method="PUT", api_path=api_path, data=data)
+        if not params:
+            params = {}
 
-        # unwrap response and return result
-        if "values" in result:
-            return result["values"]
-        elif "value" in result:
-            return result["value"]
-        else:
-            return result
+        result = []
+        while True:
+            response = self._perform_request(method="PUT", api_path=api_path, data=data, params=params)
+
+            if "values" in response:
+                # paginated response,
+                result.extend(response.get("values", []))
+                if response.get("has_more"):
+                    params["page_token"] = response.get("next_page_token")
+                else:
+                    # no more pages
+                    break
+            elif "value" in response:
+                # singular API response, set return value to response value
+                result = response["value"]
+                break
+            else:
+                # unexpected API response, just return the result
+                return response
+
+        return result
 
     def api_delete(self, api_path:str, params: dict = None) -> dict:
         """Perform REST API DELETE operation.
@@ -727,9 +777,8 @@ class OAAClient():
         api_timeout = 300
         api_path = api_path.lstrip("/")
 
-        # pre-process the parameters to not escape symbols `:+`
         if params:
-            params_str = urlencode(params, safe=':+')
+            params_str = urllib.parse.urlencode(params)
         else:
             params_str = None
 
@@ -741,10 +790,16 @@ class OAAClient():
         except requests.exceptions.HTTPError as e:
             # HTTP request completed but returned an error
             # decode expected error message parts
+            details = []
+            timestamp = None
+            request_id = None
             try:
                 result = response.json()
                 message = result.get("message", f"Unknown error during {method.upper()}")
                 code = result.get("code", "UNKNOWN")
+                timestamp = result.get("timestamp", None)
+                request_id = result.get("request_id", None)
+                details = result.get("details", [])
             except requests.exceptions.JSONDecodeError:
                 # response is not a valid JSON, unexpected
                 result = {}
@@ -753,7 +808,8 @@ class OAAClient():
                     message = f"Error reason: {response.reason}"
                 else:
                     message = "Unknown error, response is not JSON"
-            raise OAAResponseError(code, message, status_code=e.response.status_code, details=result.get("details", []))
+
+            raise OAAResponseError(code, message, status_code=e.response.status_code, details=details, timestamp=timestamp, request_id=request_id)
         except requests.exceptions.JSONDecodeError as e:
             # HTTP response reports success but response does not decode to JSON
             if response:
@@ -782,7 +838,7 @@ class OAAClient():
 
 
         # do separate DNS lookup to quickly fail if the hostname isn't resolving
-        veza_url = urlsplit(self.url)
+        veza_url = urllib.parse.urlsplit(self.url)
         try:
             x = socket.getaddrinfo(veza_url.hostname, 0)
         except socket.gaierror as e:
@@ -853,7 +909,12 @@ def report_builder_entrypoint() -> None:
         oaautils.build_report(vezacon, report_definition=report_definition)
     except OAAResponseError as e:
         log.error("Veza API error encounter building report")
-        log.error(e, e.details)
+        log.error(f"OAAResponseError {e.message} {e.status_code}")
+        log.error(e.details)
+        sys.exit(1)
+    except OAAConnectionError as e:
+        log.error("Error connecting to Veza")
+        log.error(f"OAAConnectionError {e.message} {e.status_code}")
         sys.exit(1)
     except Exception as e:
         log.error("Error building report")

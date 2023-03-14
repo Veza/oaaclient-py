@@ -176,7 +176,17 @@ def test_role_assignments():
     user = custom_app.add_local_user("test01")
     thing1 = custom_app.add_resource("Thing01", "thing")
     custom_app.define_custom_permission(CustomPermission("write", [OAAPermission.DataWrite]))
-    custom_app.add_local_role("admin", ["write"])
+    admin_role = custom_app.add_local_role("admin", ["write"])
+
+    # assert that the role has no sub-roles
+    assert admin_role.roles == []
+
+    # create two roles with the second nested inside the first
+    custom_app.define_custom_permission(CustomPermission("read", [OAAPermission.DataRead]))
+    parent_role = custom_app.add_local_role("parent", ["write"])
+    custom_app.add_local_role("child", ["read"])
+    parent_role.add_role("child")
+    assert parent_role.roles == ["child"]
 
     # assign user role on application and assert that model has role assigned to application
     user.add_role("admin", apply_to_application=True)
@@ -304,6 +314,25 @@ def test_custom_properties():
         thing1.set_property("unset", "nothing")
     assert "unknown property name unset" == e.value.message
 
+    # assert exception raised when invalid name passed
+    with pytest.raises(OAATemplateException) as e:
+        app.property_definitions.define_local_user_property("invalide-name!", OAAPropertyType.STRING)
+
+    with pytest.raises(OAATemplateException) as e:
+        app.property_definitions.define_local_user_property("_cantstart", OAAPropertyType.STRING)
+
+    with pytest.raises(OAATemplateException) as e:
+        app.property_definitions.define_local_user_property(123, OAAPropertyType.STRING)
+
+    with pytest.raises(OAATemplateException) as e:
+        app.property_definitions.define_local_group_property("invalide-name!", OAAPropertyType.STRING)
+
+    with pytest.raises(OAATemplateException) as e:
+        app.property_definitions.define_local_role_property("invalide-name!", OAAPropertyType.STRING)
+
+    with pytest.raises(OAATemplateException) as e:
+        app.property_definitions.define_resource_property("thing", "invalide-name!", OAAPropertyType.STRING)
+
     # get payload and validate all expected properties and blocks are present
     payload = app.get_payload()
     assert "custom_property_definition" in payload
@@ -399,6 +428,7 @@ CUSTOM_PROPERTIES_PAYLOAD = """
         {
           "name": "operators",
           "permissions": [],
+          "roles": [],
           "tags": [],
           "custom_properties": {
             "built_in": true

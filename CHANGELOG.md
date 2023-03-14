@@ -1,5 +1,23 @@
 # OAA Client Change Log
 
+## v1.1.1
+* `CustomApplication` and `CustomIdPProvider` have been updated to use a case insensitive dictionary from `dict` structure to store entity lists to be
+  consistent with template behavior with unique identifiers. The following attributes have been updated:
+    - `CustomApplication.local_users`
+    - `CustomApplication.local_groups`
+    - `CustomApplication.local_roles`
+    - `CustomApplication.resources`
+    - `CustomApplication.custom_permissions`
+    - `CustomResource.sub_resources`
+    - `CustomIdPProvider.users`
+    - `CustomIdPProvider.groups`
+* Property names are now validated when defined against allowed character pattern `^[a-z][a-z_]*$`
+* Fix for `OAAClient.get_reports` to support filtering for inactive reports
+* Add support for nested roles. Child roles can be added to the parent by their identifier using the `LocalRole.add_role` function.
+* `OAAResponseError` exception now contains additional properties `request_id` and `timestamp` to aid in troubleshooting
+* `OAAClient.api_post` and `OAAClient.api_put` functions will automatically paginate response if necessary to return all results.
+* Fix for API HTTP methods for parameter encoding for safe characters
+
 ## v1.1.0
 * New functions in `OAAClient` for managing Veza Queries and Reports. See function doc strings for usage.
   * `get_queries`

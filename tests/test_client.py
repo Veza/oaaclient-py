@@ -185,7 +185,8 @@ def test_api_get_error(mock_session_get):
     assert "Internal server error." in str(e.value.details)
 
 @patch("urllib3.connectionpool.HTTPConnectionPool._get_conn")
-def test_api_get_retry(mock_get_conn):
+@patch("time.sleep", return_value=None)
+def test_api_get_retry(mock_sleep, mock_get_conn):
     # Test that the correct OAAClient exception is raised on properly populated
 
     # set total retry count lower to speed up tests
@@ -213,8 +214,8 @@ def test_api_get_retry(mock_get_conn):
     with pytest.raises(OAAConnectionError) as e:
         response = veza_con.api_get(url)
 
-    retry_time = time.time() - timeout_start
-    assert retry_time > 0.5  # three retries should take at least 0.6 retries, if scaling isn't working this would be faster
+    # three tries would require two sleep backoff calls
+    assert mock_sleep.call_count == 2
 
     # test that the error is populated property
     assert e.value.error == "ERROR"
@@ -246,9 +247,9 @@ def test_api_get_retry(mock_get_conn):
     assert response.get("message") == "ok"
 
 
-@pytest.mark.skipif(not os.getenv("PYTEST_VEZA_HOST"), reason="Test host is not configured")
+@patch("time.sleep", return_value=None)
 @patch("urllib3.connectionpool.HTTPConnectionPool._get_conn")
-def test_api_get_retry_timeout(mock_get_conn):
+def test_api_get_retry_timeout(mock_get_conn, mock_sleep):
     # Test to ensure full retry timeout exceeds 60 second target
 
     # ensure that the default isn't being overridden
@@ -269,13 +270,13 @@ def test_api_get_retry_timeout(mock_get_conn):
     # ensure that the side effect is bad for the total number of retries
     mock_get_conn.return_value.getresponse.side_effect = [bad] * (OAAClient.DEFAULT_RETRY_COUNT + 1)
 
-    timeout_start = time.time()
 
     with pytest.raises(OAAConnectionError) as e:
         response = veza_con.api_get(url)
 
-    retry_time = time.time() - timeout_start
-    assert 150 < retry_time < 200
+    assert mock_sleep.call_count == 9
+    sleep_times = [c.args[0] for c in mock_sleep.call_args_list]
+    assert 150 < sum(sleep_times) < 200
 
     # test that the error is populated property
     assert e.value.error == "ERROR"
@@ -567,8 +568,61 @@ def test_compression(mock_requests, mock_get_provider, mock_get_data_source):
     assert base64.b64decode(payload['json_data'])
 
 
-def test_request_exceptions():
-    assert True
+@patch.object(requests.Session, "request")
+def test_request_exceptions(mock_session):
+
+    test_api_key = "1234"
+    url = "https://noreply.vezacloud.com"
+    # patch _test_connection to instantiate a connection object
+    with patch.object(OAAClient, "_test_connection", return_value=None):
+        veza_con = OAAClient(url=url, token=test_api_key)
+
+    # Mock a response with non-JSON data, will force a JSONDecodeError
+    mock_response = Response()
+    mock_response.status_code = 401
+    mock_response._content = b"""
+    {
+        "code": "InvalidArgument",
+        "message": "Invalid Arguments",
+        "request_id": "171d043ee1f2bd1ed6f2881f5fc4c505",
+        "timestamp": "2022-08-05T19:33:38.838666103Z",
+        "details": [
+            {
+            "@type": "type.googleapis.com/google.rpc.BadRequest",
+            "field_violations": [
+                {
+                "field": "identity_to_permissions.role_assignments.role",
+                "description": "Can't connect identity to role as role not found for application (application: SampleApp, role: Administrator, identity: my_user)"
+                }
+            ]
+            },
+            {
+            "@type": "type.googleapis.com/errorstatus.v1.UserFacingErrorInfo",
+            "reason": "INVALID_ARGUMENTS",
+            "metadata": {},
+            "message": "Request includes invalid arguments.",
+            "resolution": "Reference error details for the exact field violations."
+            }
+        ]
+    }
+    """
+    mock_response.reason = "InvalidArgument"
+    mock_response.url = "https://noreply.vezacloud.com/api/v1/call"
+
+    mock_session.return_value = mock_response
+
+    with pytest.raises(OAAResponseError) as e:
+        veza_con.api_delete("/api/path")
+
+    # should receive the generic error message
+    assert e.value.error == "InvalidArgument"
+    assert e.value.message == "Invalid Arguments"
+    assert e.value.status_code == 401
+    assert e.value.timestamp == "2022-08-05T19:33:38.838666103Z"
+    assert e.value.request_id == "171d043ee1f2bd1ed6f2881f5fc4c505"
+    assert isinstance(e.value.details, list)
+    assert len(e.value.details) == 2
+
     return
 
 def test_exception_hierarchy():
@@ -630,7 +684,7 @@ def test_bad_api_key():
 
 
 @patch.object(requests.Session, "request")
-def test_api_paging(mock_request):
+def test_api_paging_get(mock_request):
 
     test_api_key = "1234"
     url = "https://noreply.vezacloud.com"
@@ -672,6 +726,95 @@ def test_api_paging(mock_request):
 
     call_3 = mock_request.call_args_list[0]
     assert "page_size" in call_3.kwargs.get("params")
+
+@patch.object(requests.Session, "request")
+def test_api_paging_post(mock_request):
+
+    test_api_key = "1234"
+    url = "https://noreply.vezacloud.com"
+
+    with patch.object(OAAClient, "_test_connection", return_value=None):
+        veza_con = OAAClient(url=url, token=test_api_key)
+
+    # build some fake pages
+    page_1 = b"""{"values": ["1", "2", "3"], "has_more": true, "next_page_token": "page2"}"""
+    page_2 = b"""{"values": ["4", "5", "6"], "has_more": true, "next_page_token": "page3"}"""
+    page_3 = b"""{"values": ["7", "8"], "has_more": false}"""
+
+    responses = []
+
+    for page in [page_1, page_2, page_3]:
+        mock_response = Response()
+        mock_response.status_code = 200
+        mock_response._content = page
+        mock_response.url = url
+
+        responses.append(mock_response)
+
+    mock_request.side_effect = responses
+
+    result = veza_con.api_post("/fake/url", data={})
+
+    assert result == ["1", "2", "3", "4", "5", "6", "7", "8"]
+
+    # assert that it made three request calls to get through all the pages
+    assert mock_request.call_count == 3
+
+    # check that the page_token params is set correctly on each of the three expected API calls
+    # first call should have no page size
+    call_1 = mock_request.call_args_list[0]
+    assert call_1.kwargs.get("params") is None
+
+    call_2 = mock_request.call_args_list[1]
+    assert "page_token=page2" in call_2.kwargs.get("params")
+
+    call_3 = mock_request.call_args_list[2]
+    assert "page_token=page3" in call_3.kwargs.get("params")
+
+@patch.object(requests.Session, "request")
+def test_api_paging_put(mock_request):
+
+    test_api_key = "1234"
+    url = "https://noreply.vezacloud.com"
+
+    with patch.object(OAAClient, "_test_connection", return_value=None):
+        veza_con = OAAClient(url=url, token=test_api_key)
+
+    # build some fake pages
+    page_1 = b"""{"values": ["1", "2", "3"], "has_more": true, "next_page_token": "page2"}"""
+    page_2 = b"""{"values": ["4", "5", "6"], "has_more": true, "next_page_token": "page3"}"""
+    page_3 = b"""{"values": ["7", "8"], "has_more": false}"""
+
+    responses = []
+
+    for page in [page_1, page_2, page_3]:
+        mock_response = Response()
+        mock_response.status_code = 200
+        mock_response._content = page
+        mock_response.url = url
+
+        responses.append(mock_response)
+
+    mock_request.side_effect = responses
+
+    result = veza_con.api_put("/fake/url", data={})
+
+    assert result == ["1", "2", "3", "4", "5", "6", "7", "8"]
+
+    # assert that it made three request calls to get through all the pages
+    assert mock_request.call_count == 3
+
+    # check that the page_token params is set correctly on each of the three expected API calls
+    # first call should have no page size
+    call_1 = mock_request.call_args_list[0]
+    assert call_1.kwargs.get("params") is None
+
+    call_2 = mock_request.call_args_list[1]
+    assert "page_token=page2" in call_2.kwargs.get("params")
+
+    call_3 = mock_request.call_args_list[2]
+    assert "page_token=page3" in call_3.kwargs.get("params")
+
 
 def test_allowed_characters():
 

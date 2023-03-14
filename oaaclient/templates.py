@@ -15,6 +15,8 @@ from typing import Optional, List
 import json
 import re
 
+from .structures import CaseInsensitiveDict
+
 
 class OAATemplateException(Exception):
     """ General exception used for violations of the template schema. """
@@ -78,7 +80,9 @@ class CustomApplication(Application):
     CustomApplication class consists of identities, resources and permissions and produces the OAA JSON payload for the
     custom application template.
 
-    Class uses dictionaries to track most components, dictionaries are all keys by string of the entity identifier (name or id)
+    Class uses dictionaries to track most entities that can be referenced after creation. Dictionaries keys are case insensitive
+    of the entity identifier (name or id). This applies to `local_users`, `local_groups`, `local_roles`, `idp_identities`,
+    `resources` and `custom_permissions`.
 
     Args:
         name (str): Name of custom application
@@ -103,16 +107,16 @@ class CustomApplication(Application):
 
     def __init__(self, name: str, application_type: str, description: str = None) -> None:
         super().__init__(name, application_type, description)
-        self.local_users = {}
-        self.local_groups = {}
-        self.local_roles = {}
-        self.idp_identities = {}
-        self.resources = {}
+        self.local_users = CaseInsensitiveDict()
+        self.local_groups = CaseInsensitiveDict()
+        self.local_roles = CaseInsensitiveDict()
+        self.idp_identities = CaseInsensitiveDict()
+        self.resources = CaseInsensitiveDict()
         self.tags = []
         self.property_definitions = ApplicationPropertyDefinitions(application_type)
         self.properties = {}
 
-        self.custom_permissions = {}
+        self.custom_permissions = CaseInsensitiveDict()
 
         self.identity_to_permissions = {}
 
@@ -265,7 +269,7 @@ class CustomApplication(Application):
 
         Local users will be identified by `name` by default, if `unique_id` is provided it will be used as the identifier instead.
 
-        Local users can be referenced after creation using the `.local_users` dictionary attribute. Dictionary is keyed by unique_id or name if not using unique_id.
+        Local users can be referenced after creation using the `.local_users` dictionary attribute. Dictionary is case insensitivekeyed by unique_id or name if not using unique_id.
 
         Use `unique_id` when name is not guaranteed to be unique. All permission, group and role assignments will be referenced by unique_id.
 
@@ -297,7 +301,7 @@ class CustomApplication(Application):
 
         Local groups will be identified by `name` by default, if `unique_id` is provided it will be used as the identifier instead
 
-        Local groups can be referenced after creation using `.local_groups` dictionary attribute. Dictionary is keyed by unique_id or name if not using unique_id.
+        Local groups can be referenced after creation using `.local_groups` dictionary attribute. Dictionary is case insensitive keyed by unique_id or name if not using unique_id.
 
         Args:
             name (str): Display name for group
@@ -324,7 +328,7 @@ class CustomApplication(Application):
         - A local role represents a collection of permissions.
         - Identities (local user, group, idp user) can be assigned a role to the application or resource, granting the role's permissions.
         - Local roles will be identified by `name` by default, if `unique_id` is provided it will be used as the identifier instead.
-        - Local roles can be referenced after creation if needed through `.local_roles` dictionary attribute.
+        - Local roles can be referenced after creation if needed through `.local_roles` case insensitive dictionary attribute.
         - When a permission that has `resource_types` is added to a role, it will only apply to resources with a matching `resource_type`
 
         Args:
@@ -506,7 +510,7 @@ class CustomResource():
         else:
             self.resource_key = str(name)
 
-        self.sub_resources = {}
+        self.sub_resources = CaseInsensitiveDict()
         self.connections = []
         self.property_definitions = property_definitions
         self.properties = {}
@@ -970,7 +974,7 @@ class LocalGroup(Identity):
         return f"LocalGroup(name={self.name!r}, unique_id={self.unique_id!r}, identities={self.identities})"
 
     def add_group(self, group: str) -> None:
-        """ Add user to local group (group must be created separately).
+        """ Add a nested group to local group (group must be created separately).
 
         Args:
             group (str): identifier of local group
@@ -983,10 +987,10 @@ class LocalGroup(Identity):
         self.groups = append_helper(self.groups, group)
 
     def add_identity(self, identity: str) -> None:
-        """ Add an identity to user.
+        """ Add an identity to group.
 
-        The  email address or another valid identifier should match that of an IdP principal (Okta, Azure, ect).
-        Veza will create a connection from the application local user to IdP identity.
+        The email address or another valid identifier should match that of an IdP principal (Okta, Azure, ect).
+        Veza will create a connection from the application local group to IdP identity.
 
         Args:
             identity (str): primary IdP identifier for group to associate
@@ -1063,6 +1067,7 @@ class LocalRole():
         name (str): name of local role
         unique_id (str): Unique identifier for role for identification by ID
         permissions (list[CustomPermission]): list of custom permission names (strings) to associate with the role
+        roles (list[LocalRole]): list of roles nested inside the role
         tags (list[Tag]): list of Tags instances
     """
 
@@ -1083,6 +1088,7 @@ class LocalRole():
 
         self.property_definitions = property_definitions
         self.properties = {}
+        self.roles = []
         self.tags = []
 
     def __str__(self) -> str:
@@ -1106,6 +1112,20 @@ class LocalRole():
 
         self.permissions.extend(permissions)
 
+    def add_role(self, role: str) -> None:
+        """ Add a nested sub-role to the role (nested role must be created separately)
+
+        Args:
+            role (str): identifier of the local role to nest inside this role
+
+        """
+        role = str(role)
+
+        if (self.unique_id and self.unique_id == role) or (self.unique_id is None and self.name == role):
+            raise OAATemplateException("Cannot add role to self")
+
+        self.roles = append_helper(self.roles, role)
+        
     def add_tag(self, key: str, value: str = "") -> None:
         """ Add a new tag to role.
 
@@ -1156,6 +1176,7 @@ class LocalRole():
         response = {}
         response['name'] = self.name
         response['permissions'] = unique_strs(self.permissions)
+        response['roles'] = self.roles
         response['tags'] = [tag.__dict__ for tag in self.tags]
         response['custom_properties'] = self.properties
         if self.unique_id:
@@ -1167,11 +1188,9 @@ class LocalRole():
 class CustomPermission():
     """CustomPermission class for defining `CustomApplication` permissions.
 
-    - Custom permissions represent the named permissions for the application in its terms (e.g. "Admin" or "PUSH") and define the
-    Veza canonical mapping (e.g. DataRead, MetadataRead, DataWrite).
+    - Custom permissions represent the named permissions for the application in its terms (e.g. "Admin" or "PUSH") and define the Veza canonical mapping (e.g. DataRead, MetadataRead, DataWrite).
     - A permission can either be applied directly to an application or resource or assigned as part of a role.
-    - Optionally, when permissions are used as part of a role, if the `resource_types` list is populated the permission
-    will only be applied to resources who's type is in the `resource_types` list when the role is applied to a resource.
+    - Optionally, when permissions are used as part of a role, if the `resource_types` list is populated the permission will only be applied to resources who's type is in the `resource_types` list when the role is applied to a resource.
 
     Args:
         name (str): Display name for permission
@@ -1319,7 +1338,8 @@ class ApplicationPropertyDefinitions():
             property_type (OAAPropertyType): type for property
 
         """
-        self.__validate_types(name, property_type)
+        self.validate_name(name)
+        self._validate_types(name, property_type)
         self.application_properties[name] = property_type
 
     def define_local_user_property(self, name: str, property_type: OAAPropertyType) -> None:
@@ -1330,7 +1350,8 @@ class ApplicationPropertyDefinitions():
             property_type (OAAPropertyType): type for property
 
         """
-        self.__validate_types(name, property_type)
+        self.validate_name(name)
+        self._validate_types(name, property_type)
         self.local_user_properties[name] = property_type
 
     def define_local_group_property(self, name: str, property_type: OAAPropertyType) -> None:
@@ -1341,7 +1362,8 @@ class ApplicationPropertyDefinitions():
             property_type (OAAPropertyType): type for property
 
         """
-        self.__validate_types(name, property_type)
+        self.validate_name(name)
+        self._validate_types(name, property_type)
         self.local_group_properties[name] = property_type
 
     def define_local_role_property(self, name: str, property_type: OAAPropertyType) -> None:
@@ -1352,7 +1374,8 @@ class ApplicationPropertyDefinitions():
             property_type (OAAPropertyType): type for property
 
         """
-        self.__validate_types(name, property_type)
+        self.validate_name(name)
+        self._validate_types(name, property_type)
         self.local_role_properties[name] = property_type
 
     def define_resource_property(self, resource_type: str, name: str, property_type: OAAPropertyType) -> None:
@@ -1364,7 +1387,8 @@ class ApplicationPropertyDefinitions():
             property_type (OAAPropertyType): type for property
 
         """
-        self.__validate_types(name, property_type)
+        self.validate_name(name)
+        self._validate_types(name, property_type)
         if resource_type not in self.resource_properties:
             self.resource_properties[resource_type] = {name: property_type}
         else:
@@ -1407,7 +1431,7 @@ class ApplicationPropertyDefinitions():
         else:
             raise OAATemplateException(f"unknown property name {property_name}")
 
-    def __validate_types(self, name: str, property_type: OAAPropertyType) -> None:
+    def _validate_types(self, name: str, property_type: OAAPropertyType) -> None:
         """ Helper function to validate that custom property parameters are of the correct types.
 
         Args:
@@ -1419,6 +1443,28 @@ class ApplicationPropertyDefinitions():
             raise OAATemplateException("property name must be type string")
         if not isinstance(property_type, OAAPropertyType):
             raise OAATemplateException("property_type must be type OAAPropertyType enum")
+
+    def validate_name(self, name: str) -> None:
+        """Check property name for valid characters
+
+        Raises an exception if the name string does not match required pattern. Name must start with
+        a character and can only contain letters and _ character.
+
+        Args:
+            name (str): name of property to validate
+
+        Raises:
+            OAATemplateException: Name is not a string
+            OAATemplateException: Name contains invalid characters or does not start with a letter
+        """
+
+        if not isinstance(name, str):
+            raise OAATemplateException("Property name must be a string")
+
+        if not re.match(r"^[a-z][a-z_]*$", name.lower()):
+            raise OAATemplateException("Lower-cased property name must match the pattern: ^[a-z][a-z_]*$'")
+
+        return
 
 
 ###############################################################################
@@ -1475,8 +1521,8 @@ class CustomIdPProvider():
 
         self.property_definitions = IdPPropertyDefinitions()
         self.domain = CustomIdPDomain(domain, property_definitions=self.property_definitions)
-        self.users = {}
-        self.groups = {}
+        self.users = CaseInsensitiveDict()
+        self.groups = CaseInsensitiveDict()
 
     def __str__(self) -> str:
         return f"Custom IdP Provider {self.name} - {self.idp_type}"
@@ -1911,7 +1957,7 @@ class IdPPropertyDefinitions():
             name (str): name of property
             property_type (OAAPropertyType): type for property
         """
-        self.__validate_types(name, property_type)
+        self._validate_types(name, property_type)
         self.domain_properties[name] = property_type
 
     def define_user_property(self, name: str, property_type: OAAPropertyType) -> None:
@@ -1921,7 +1967,7 @@ class IdPPropertyDefinitions():
             name (str): name of property
             property_type (OAAPropertyType): type for property
         """
-        self.__validate_types(name, property_type)
+        self._validate_types(name, property_type)
         self.user_properties[name] = property_type
 
     def define_group_property(self, name: str, property_type: OAAPropertyType) -> None:
@@ -1931,7 +1977,7 @@ class IdPPropertyDefinitions():
             name (str): name of property
             property_type (OAAPropertyType): type for property
         """
-        self.__validate_types(name, property_type)
+        self._validate_types(name, property_type)
         self.group_properties[name] = property_type
 
     def validate_property_name(self, property_name: str, entity_type: str) -> None:
@@ -1965,7 +2011,7 @@ class IdPPropertyDefinitions():
         else:
             raise OAATemplateException(f"unknown property name {property_name}")
 
-    def __validate_types(self, name: str, property_type: OAAPropertyType) -> None:
+    def _validate_types(self, name: str, property_type: OAAPropertyType) -> None:
         """ Validate that custom property parameters are of the correct types (helper function).
 
         Args:

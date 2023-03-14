@@ -81,14 +81,15 @@ def generate_app():
     # groups
     app.property_definitions.define_local_group_property("group_id", OAAPropertyType.NUMBER)
     group1 = app.add_local_group("group1")
-    group1.created_ad = "2001-01-01T00:00:00.000Z"
+    group1.created_at = "2001-01-01T00:00:00.000Z"
     group1.set_property("group_id", 1)
 
-    app.local_users["bob"].add_group("group1")
-    app.local_users["marry"].add_group("group1")
+    # mix case up to test case-insensitive dict
+    app.local_users["BOB"].add_group("group1")
+    app.local_users["maRRy"].add_group("group1")
 
     group2 = app.add_local_group("group2")
-    group2.created_ad = "2001-01-01T00:00:00.000Z"
+    group2.created_at = "2001-01-01T00:00:00.000Z"
     group2.set_property("group_id", 2)
 
     app.local_users["bob"].add_group("group2")
@@ -114,6 +115,11 @@ def generate_app():
     role2.add_permissions(["view"])
     role2.set_property("role_id", 1)
     role1.set_property("custom", True)
+
+    role3 = app.add_local_role("role3")
+    role3.add_permissions(["manage"])
+    role3.set_property("role_id", 3)
+    role3.add_role("role2")
 
     app.add_local_role("empty_role")
 
@@ -144,6 +150,7 @@ def generate_app():
 
     # authorizations
     app.local_users["bob"].add_role("role1", apply_to_application=True)
+    app.local_users["sue"].add_role("role3", apply_to_application=True)
     app.local_groups["group2"].add_role("role2", resources=[thing1])
     app.local_users["marry"].add_permission("view", resources=[thing2, cog1])
     app.local_users["rob"].add_permission("manage", resources=[thing1], apply_to_application=True)
@@ -305,12 +312,14 @@ GENERATED_APP_PAYLOAD = """
       "local_groups": [
         {
           "name": "group1",
+          "created_at": "2001-01-01T00:00:00.000Z",
           "custom_properties": {
             "group_id": 1
           }
         },
         {
           "name": "group2",
+          "created_at": "2001-01-01T00:00:00.000Z",
           "custom_properties": {
             "group_id": 2
           }
@@ -331,6 +340,7 @@ GENERATED_APP_PAYLOAD = """
             "Admin",
             "Manage_Thing"
           ],
+          "roles": [],
           "tags": [],
           "custom_properties": {
             "role_id": 1,
@@ -342,14 +352,27 @@ GENERATED_APP_PAYLOAD = """
           "permissions": [
             "view"
           ],
+          "roles": [],
           "tags": [],
           "custom_properties": {
             "role_id": 1
           }
         },
         {
+          "name": "role3",
+          "permissions": [
+            "manage"
+          ],
+          "roles": ["role2"],
+          "tags": [],
+          "custom_properties": {
+            "role_id": 3
+          }
+        },
+        {
           "name": "empty_role",
           "permissions": [],
+          "roles": [],
           "tags": [],
           "custom_properties": {}
         }
@@ -493,6 +516,18 @@ GENERATED_APP_PAYLOAD = """
             "thing2.cog1"
           ],
           "permission": "view"
+        }
+      ]
+    },
+    {
+      "identity": "sue",
+      "identity_type": "local_user",
+      "role_assignments": [
+        {
+          "application": "pytest generated app",
+          "role": "role3",
+          "apply_to_application": true,
+          "resources": []
         }
       ]
     },

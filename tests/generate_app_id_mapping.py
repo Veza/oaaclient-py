@@ -75,14 +75,14 @@ def generate_app_id_mapping():
     # groups
     app.property_definitions.define_local_group_property("group_id", OAAPropertyType.NUMBER)
     group1 = app.add_local_group("group1", unique_id="g1")
-    group1.created_ad = "2001-01-01T00:00:00.000Z"
+    group1.created_at = "2001-01-01T00:00:00.000Z"
     group1.set_property("group_id", 1)
 
     app.local_users[1234].add_group("g1")
     app.local_users[1235].add_group("g1")
 
     group2 = app.add_local_group("group2", unique_id="g2")
-    group2.created_ad = "2001-01-01T00:00:00.000Z"
+    group2.created_at = "2001-01-01T00:00:00.000Z"
     group2.set_property("group_id", 2)
 
     app.local_users[1235].add_group("g2")
@@ -261,6 +261,7 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
       "local_groups": [
         {
           "name": "group1",
+          "created_at": "2001-01-01T00:00:00.000Z",
           "custom_properties": {
             "group_id": 1
           },
@@ -268,6 +269,7 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
         },
         {
           "name": "group2",
+          "created_at": "2001-01-01T00:00:00.000Z",
           "custom_properties": {
             "group_id": 2
           },
@@ -289,6 +291,7 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
             "all",
             "Admin"
           ],
+          "roles": [],
           "tags": [],
           "custom_properties": {
             "role_id": 1,
@@ -301,6 +304,7 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
           "permissions": [
             "view"
           ],
+          "roles": [],
           "tags": [],
           "custom_properties": {
             "role_id": 1
