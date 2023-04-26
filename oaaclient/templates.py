@@ -374,8 +374,8 @@ class CustomApplication(Application):
         """ Add a tag to the Application
 
         Args:
-            key (str): Name for the tag
-            value (str, optional): String value for tag. Defaults to "".
+            key (str): Key for tag, aka name. Must be present and must be letters, numbers or _ (underscore) only.
+            value (str, optional): Value for Tag, will appear in Veza as `key:value`. Must be letters, numbers, whitespace and the special characters @,._- only. Defaults to "".
         """
 
         tag = Tag(key=key, value=value)
@@ -607,8 +607,8 @@ class CustomResource():
         """ Add a new tag to resource.
 
         Args:
-            key (str): Name for the tag.
-            value (str, optional): String value for tag. Defaults to "".
+            key (str): Key for tag, aka name. Must be present and must be letters, numbers or _ (underscore) only.
+            value (str, optional): Value for Tag, will appear in Veza as `key:value`. Must be letters, numbers, whitespace and the special characters @,._- only. Defaults to "".
         """
         tag = Tag(key=key, value=value)
         if tag not in self.tags:
@@ -783,8 +783,8 @@ class Identity():
         """ Add a new tag to identity.
 
         Args:
-            key (str): Name for the tag
-            value (str, optional): String value for tag. Defaults to "".
+            key (str): Key for tag, aka name. Must be present and must be letters, numbers or _ (underscore) only.
+            value (str, optional): Value for Tag, will appear in Veza as `key:value`. Must be letters, numbers, whitespace and the special characters @,._- only. Defaults to "".
         """
 
         tag = Tag(key=key, value=value)
@@ -1125,13 +1125,13 @@ class LocalRole():
             raise OAATemplateException("Cannot add role to self")
 
         self.roles = append_helper(self.roles, role)
-        
+
     def add_tag(self, key: str, value: str = "") -> None:
         """ Add a new tag to role.
 
         Args:
-            key (str): Name for the tag
-            value (str, optional): String value for tag. Defaults to "".
+            key (str): Key for tag, aka name. Must be present and must be letters, numbers or _ (underscore) only.
+            value (str, optional): Value for Tag, will appear in Veza as `key:value`. Must be letters, numbers, whitespace and the special characters @,._- only. Defaults to "".
         """
 
         tag = Tag(key=key, value=value)
@@ -1462,7 +1462,7 @@ class ApplicationPropertyDefinitions():
             raise OAATemplateException("Property name must be a string")
 
         if not re.match(r"^[a-z][a-z_]*$", name.lower()):
-            raise OAATemplateException("Lower-cased property name must match the pattern: ^[a-z][a-z_]*$'")
+            raise OAATemplateException(f"Lower-cased property name must match the pattern: ^[a-z][a-z_]*$': {name}")
 
         return
 
@@ -2029,11 +2029,11 @@ class IdPPropertyDefinitions():
 # Shared models
 ###############################################################################
 class Tag():
-    """ Veza tag data model.
+    """ Veza Tag data model.
 
     Args:
         key (str): key for tag, aka name. Must be present and must be letters, numbers or _ (underscore) only.
-        value (str, optional): Value for tag, will appear in Veza as `key:value`. Must be letters, numbers or _ (underscore) only.
+        value (str, optional): Value for tag, will appear in Veza as `key:value`. Must be letters, numbers, whitespace and the special characters @,._- only.
 
     Attributes:
         key (str): key for tag, aka name. Must be present and must be letters, numbers or _ (underscore) only.
@@ -2044,10 +2044,10 @@ class Tag():
         self.key = str(key)
         self.value = str(value)
 
-        if not re.match(r"^[\w\d\s_]+$", self.key):
-            raise OAATemplateException(f"Invalid characters in tag key {self.key}: may only contain letters, numbers, whitespace and _ (underscore)")
+        if not re.match(r"^[\w\d_]+$", self.key):
+            raise OAATemplateException(f"Invalid characters in tag key. Key '{self.key}'. Key may only contain letters, numbers, and _ (underscore)")
         if self.value != "" and not re.match(r"^[\w\d\s_,@\.-]+$", self.value):
-            raise OAATemplateException(f"Invalid characters in tag value {self.value}: may only contain letters, numbers, whitespace and the special characters @,._-")
+            raise OAATemplateException(f"Invalid characters in tag value. Value '{self.value}'. Value may only contain letters, numbers, whitespace and the special characters @,._-")
 
     def __str__(self) -> str:
         if self.value:

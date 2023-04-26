@@ -1,7 +1,13 @@
-import pytest
-import uuid
+import logging
 import os
+import uuid
+
+import pytest
+
 from oaaclient.client import OAAClient, OAAClientError
+
+log = logging.getLogger()
+log.setLevel(logging.DEBUG)
 
 @pytest.fixture(scope="module")
 def veza_con():

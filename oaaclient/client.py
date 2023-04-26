@@ -18,6 +18,7 @@ import gzip
 import json
 import logging
 import os
+import platform
 import re
 import socket
 import sys
@@ -30,6 +31,7 @@ from requests.adapters import HTTPAdapter
 from requests.exceptions import JSONDecodeError as RequestsJSONDecodeError
 from urllib3.util.retry import Retry
 
+from oaaclient import __version__ as OAACLIENT_VERSION
 import oaaclient.utils as oaautils
 from oaaclient.templates import CustomApplication, CustomIdPProvider
 
@@ -76,15 +78,17 @@ class OAAConnectionError(OAAClientError):
 class OAAClient():
     """Class for OAA API Connection and Management.
 
-    Utilities for OAA-related operations with Veza API calls. Manages custom providers and datasources, and can push OAA
+    Utilities for OAA-related operations with Veza API calls. Manages custom providers and data sources, and can push OAA
     payloads from JSON or template objects.
 
+    Connection url and API key can be automatically loaded from OS environment values if set. To utilize environment variables
+    initialize OAAClient without providing a URL or API key value and set the `VEZA_URL` and `VEZA_API_KEY` OS environment variables.
+
     Args:
-        url (str): URL for Veza instance.
-        api_key (str): Veza API key.
+        url (str, optional): URL for Veza instance.
+        api_key (str, optional): Veza API key.
         username (str, optional): Not used (legacy). Defaults to None.
         token (str, optional): Legacy parameter name for API key. Defaults to None.
-        skip_validation (bool, optional): Skip test API call to validate host and credentials. Defaults to False.
 
     Attributes:
         url (str): URL of the Veza instance to connect to
@@ -109,9 +113,12 @@ class OAAClient():
     # Must be passed with params for API call when calling paging APIs `params={"page_size": self.DEFAULT_PAGE_LENGTH}`
     DEFAULT_PAGE_SIZE = 250
 
-    def __init__(self, url:str, api_key: str = None, username: str = None, token: str = None):
-        if not url:
-            raise ValueError("Must provide url argument")
+    def __init__(self, url:str = None, api_key: str = None, username: str = None, token: str = None):
+
+        if not url and "VEZA_URL" in os.environ:
+            url = os.getenv("VEZA_URL", "")
+        elif not url:
+            raise ValueError("Must provide Veza URL")
 
         if not re.match(r"^https:\/\/.*", url):
             self.url = f"https://{url}"
@@ -130,8 +137,12 @@ class OAAClient():
 
         if api_key:
             self.api_key = api_key
-        else:
+        elif token:
             self.api_key = token
+        elif "VEZA_API_KEY" in os.environ:
+            self.api_key = os.getenv("VEZA_API_KEY", "")
+        else:
+            raise ValueError("Must provide Veza API key")
 
         if not self.url:
             raise OAAClientError("MISSING_URL", "URL cannot be None")
@@ -154,6 +165,8 @@ class OAAClient():
         self._http_adapter = requests.Session()
         self._http_adapter.mount("https://", adapter)
         self._http_adapter.mount("http://", adapter)
+
+        self.update_user_agent()
 
         # test connection
         self._test_connection()
@@ -773,7 +786,10 @@ class OAAClient():
         """
 
         response = None
-        headers = {"authorization": f"Bearer {self.api_key}"}
+
+        headers = {}
+        headers["authorization"] = f"Bearer {self.api_key}"
+        headers["user-agent"] = self._user_agent
         api_timeout = 300
         api_path = api_path.lstrip("/")
 
@@ -808,6 +824,10 @@ class OAAClient():
                     message = f"Error reason: {response.reason}"
                 else:
                     message = "Unknown error, response is not JSON"
+
+            log.debug(f"Error returned by Veza API: {e.response.status_code} {message} {e.response.url} request_id: {request_id} timestamp {timestamp}")
+            for d in details:
+                log.debug(d)
 
             raise OAAResponseError(code, message, status_code=e.response.status_code, details=details, timestamp=timestamp, request_id=request_id)
         except requests.exceptions.JSONDecodeError as e:
@@ -854,6 +874,29 @@ class OAAClient():
         except OAAConnectionError as e:
             log.debug("Unable to connect during API connection test")
             raise e
+
+    def update_user_agent(self, extra: str = "") -> None:
+        """Updates the User-Agent string passed with all API calls
+
+        Generates a User-Agent with the oaaclient version, Python version and platform information.
+
+        The optional `extra` string will be appended if provided.
+
+        Args:
+            extra (str, optional): Additional information to append to User-Agent string. Defaults to "".
+        """
+
+        python_version = platform.python_version()
+        os_name = platform.system()
+        os_version = platform.release()
+
+        self._user_agent = f"oaaclient/{OAACLIENT_VERSION} python/{python_version} {os_name}/{os_version};"
+        if extra:
+            self._user_agent += f" {extra}"
+
+        log.debug(f"User-Agent {self._user_agent}")
+
+        return
 
 class OAARetry(Retry):
     """Super class for urllib3.util.retry

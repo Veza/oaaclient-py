@@ -1,5 +1,11 @@
 # OAA Client Change Log
 
+## v1.1.2
+* Update to allowed characters for Tag keys. Tag keys can only contain numbers, letters and the _ character. `OAATemplateException` is raised for invalid characters in Tag key or value.
+* `client.OAAClient` connection class now can automatically load OS environment values for `VEZA_URL` and `VEZA_API_KEY`
+* Added debug logging to `client.OAAClient` API function to log detailed error response information if logging level is set to `DEBUG`.
+* OAAClient version and calling platform details are included in API call headers as the User-Agent.
+
 ## v1.1.1
 * `CustomApplication` and `CustomIdPProvider` have been updated to use a case insensitive dictionary from `dict` structure to store entity lists to be
   consistent with template behavior with unique identifiers. The following attributes have been updated:

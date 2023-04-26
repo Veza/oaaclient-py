@@ -136,7 +136,7 @@ def generate_app():
     thing1.set_property("hair_color", "blue")
     thing1.set_property("peers", ["thing2", "thing3"])
     thing1.set_property("publish_date", "1959-03-12T00:00:00.000Z")
-    thing1.add_tag("A tag1", value="This is a value @,-_.")
+    thing1.add_tag("tag1", value="This is a value @,-_.")
 
     thing2 = app.add_resource("thing2", resource_type="thing")
     thing2.set_property("private", False)
@@ -398,7 +398,7 @@ GENERATED_APP_PAYLOAD = """
           },
           "tags": [
             {
-              "key": "A tag1",
+              "key": "tag1",
               "value": "This is a value @,-_."
             }
           ]
