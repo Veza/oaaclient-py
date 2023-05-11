@@ -909,7 +909,9 @@ class OAARetry(Retry):
     """
     def __init__(self, backoff_max=30, **kwargs) -> None:
         super(OAARetry, self).__init__(**kwargs)
+        #urllib3 1.x and 2.x have slightly different behavior for BACKOFF_MAX, setting both values covers both
         self.DEFAULT_BACKOFF_MAX = backoff_max
+        self.backoff_max = backoff_max
 
 
 def report_builder_entrypoint() -> None:

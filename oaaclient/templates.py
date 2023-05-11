@@ -161,9 +161,6 @@ class CustomApplication(Application):
 
     def permissions_dict(self) -> dict:
         """ Return the 'permissions' section of the payload as serializable dictionary. """
-        # TODO: error handling for empty list or non-permissions
-        if not self.custom_permissions:
-            raise Exception("No custom permissions defined, must define at least one permission")
 
         return [permission.to_dict() for permission in self.custom_permissions.values()]
 

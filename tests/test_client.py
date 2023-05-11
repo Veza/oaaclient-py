@@ -11,6 +11,8 @@ import logging
 import os
 import time
 import uuid
+import urllib3
+import io
 from http.client import HTTPMessage, HTTPResponse
 from unittest.mock import MagicMock, PropertyMock, patch
 
@@ -184,14 +186,10 @@ def test_api_get_error(mock_session_get):
     assert len(e.value.details) == 1
     assert "Internal server error." in str(e.value.details)
 
-@patch("urllib3.connectionpool.HTTPConnectionPool._get_conn")
+@patch("urllib3.connectionpool.HTTPConnectionPool._make_request")
 @patch("time.sleep", return_value=None)
-def test_api_get_retry(mock_sleep, mock_get_conn):
-    # Test that the correct OAAClient exception is raised on properly populated
-
-    # set total retry count lower to speed up tests
-    os.environ.setdefault("OAA_API_RETRIES", "3")
-
+def test_api_get_retry(mock_sleep, mock_make_request):
+    # test that the retry logic behaves correctly, that it retries the right number of times and that total time is within our expected
     test_api_key = "1234"
     # patch _test_connection to instantiate a connection object
     with patch.object(OAAClient, "_test_connection", return_value=None):
@@ -199,91 +197,39 @@ def test_api_get_retry(mock_sleep, mock_get_conn):
 
     url = "/api/should/fail"
 
-    bad = MagicMock(status=500, msg=HTTPMessage(), response=Response())
-    bad.create_autospec(HTTPResponse)
-    # assert five bad raises exception
-
-
-    # the mock_get_conn is patched urllib3.connectionpool.HTTPConnectionPool._get_conn
-    # _get_conn returns a urllib3.HTTPConection
-    # ensure that the side effect is bad for the total number of retries
-    mock_get_conn.return_value.getresponse.side_effect = [bad] * (OAAClient.DEFAULT_RETRY_COUNT + 1)
-
-    timeout_start = time.time()
+    bad = urllib3.response.HTTPResponse(status=500, reason="Failure", request_url=url)
+    mock_make_request.return_value = bad
 
     with pytest.raises(OAAConnectionError) as e:
         response = veza_con.api_get(url)
 
-    # three tries would require two sleep backoff calls
-    assert mock_sleep.call_count == 2
+    # ten retries (default) would require nine sleep back off calls
+    assert mock_sleep.call_count == 9
+    sleep_times = [c.args[0] for c in mock_sleep.call_args_list]
+    assert sum(sleep_times) == 157.2
 
     # test that the error is populated property
     assert e.value.error == "ERROR"
     assert "Max retries exceeded" in e.value.message
 
-    # test that retry to good works
+    # test that retry to good works correct, two bad responses and a good
     url = "/api/should/work"
 
-    mock_get_conn.reset_mock()
+    mock_make_request.reset_mock()
 
-    good = MagicMock(name="HttpResponse200")
-    good.status = 200
-    # in order to get urlib3 to populate the response content before returning it to requests you have to do a few things
-    # set msg contains the headers, need to tell it that there is a response coming that is a chunked response
-    good.msg = HTTPMessage()
-    good.msg.add_header('Transfer-Encoding', 'chunked')
-    good.msg.add_header('Content-Type', 'application/json')
-    # in order to get urllib3 to read the content we need to pass it a size of chunks, this is from fp.readline
-    good.fp.readline.side_effect = [b'1dc1\r\n', b'0\r\n', b'\r\n']
-    # after it works out the sizes it makes "_safe_read" calls to get the actual content, we can just pass the value we want here
-    good._safe_read.return_value = b'{"message": "ok"}'
+    response_body = io.BytesIO(b'{"message": "ok"}')
+    headers={"Content-Type": "application/json", "Content-Length": "17"}
+    good = urllib3.response.HTTPResponse(response_body, status=200, request_url=url, headers=headers, preload_content=False)
 
-    bad.reset_mock()
-    mock_get_conn.return_value.getresponse.side_effect = [bad, bad, good]
+    # two bad responses then a good should result in no exceptions raised to caller
+    mock_make_request.side_effect = [bad, bad, good]
 
     # test that the api get will retry to get to the good response
     response = veza_con.api_get(url)
     log.debug(response)
     assert response.get("message") == "ok"
 
-
-@patch("time.sleep", return_value=None)
-@patch("urllib3.connectionpool.HTTPConnectionPool._get_conn")
-def test_api_get_retry_timeout(mock_get_conn, mock_sleep):
-    # Test to ensure full retry timeout exceeds 60 second target
-
-    # ensure that the default isn't being overridden
-    del os.environ["OAA_API_RETRIES"]
-
-    test_api_key = "1234"
-    # patch _test_connection to instantiate a connection object
-    with patch.object(OAAClient, "_test_connection", return_value=None):
-        veza_con = OAAClient(url="https://noreply.vezacloud.com", token=test_api_key)
-
-    url = "/api/should/fail"
-
-    bad = MagicMock(status=500, msg=HTTPMessage(), response=Response())
-    bad.create_autospec(HTTPResponse)
-
-    # the mock_get_conn is patched urllib3.connectionpool.HTTPConnectionPool._get_conn
-    # _get_conn returns a urllib3.HTTPConection
-    # ensure that the side effect is bad for the total number of retries
-    mock_get_conn.return_value.getresponse.side_effect = [bad] * (OAAClient.DEFAULT_RETRY_COUNT + 1)
-
-
-    with pytest.raises(OAAConnectionError) as e:
-        response = veza_con.api_get(url)
-
-    assert mock_sleep.call_count == 9
-    sleep_times = [c.args[0] for c in mock_sleep.call_args_list]
-    assert 150 < sum(sleep_times) < 200
-
-    # test that the error is populated property
-    assert e.value.error == "ERROR"
-    assert "Max retries exceeded" in e.value.message
-
     return
-
 
 @patch.object(requests.Session, "request")
 def test_api_get_nonjson_error(mock_session_get):

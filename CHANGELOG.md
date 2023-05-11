@@ -1,5 +1,9 @@
 # OAA Client Change Log
 
+## v1.1.3
+* Minor fix for API retry to support latest Python requests version
+* Removes validation that permissions and assignments are present before push to support identity only submissions 
+
 ## v1.1.2
 * Update to allowed characters for Tag keys. Tag keys can only contain numbers, letters and the _ character. `OAATemplateException` is raised for invalid characters in Tag key or value.
 * `client.OAAClient` connection class now can automatically load OS environment values for `VEZA_URL` and `VEZA_API_KEY`
