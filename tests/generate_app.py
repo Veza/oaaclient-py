@@ -6,7 +6,7 @@ license that can be found in the LICENSE file or at
 https://opensource.org/licenses/MIT.
 """
 
-from oaaclient.templates import CustomApplication, Tag, OAAPermission, OAAPropertyType
+from oaaclient.templates import CustomApplication, Tag, OAAPermission, OAAPropertyType, LocalUserType
 
 
 def generate_app():
@@ -77,6 +77,10 @@ def generate_app():
         user.set_property("birthday", "2000-01-01T00:00:00.000Z")
 
     app.local_users["marry"].is_active = False
+    app.local_users["marry"].user_type = LocalUserType.Human
+
+    bot_user = app.add_local_user("bot_user")
+    bot_user.user_type = LocalUserType.ServiceAccount
 
     # groups
     app.property_definitions.define_local_group_property("group_id", OAAPropertyType.NUMBER)
@@ -246,6 +250,7 @@ GENERATED_APP_PAYLOAD = """
           "last_login_at": "2002-02-01T00:00:00.000Z",
           "deactivated_at": "2003-03-01T00:00:00.000Z",
           "password_last_changed_at": "2004-04-01T00:00:00.000Z",
+          "user_type": "human",
           "custom_properties": {
             "is_guest": false,
             "user_id": 1,
@@ -307,6 +312,10 @@ GENERATED_APP_PAYLOAD = """
             ],
             "birthday": "2000-01-01T00:00:00.000Z"
           }
+        },
+        {
+          "name": "bot_user",
+          "user_type": "service_account"
         }
       ],
       "local_groups": [

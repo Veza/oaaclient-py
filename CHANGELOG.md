@@ -1,8 +1,11 @@
 # OAA Client Change Log
 
+## v1.1.4
+* Added support for setting LocalUser "User Type" property. Property can be set by `LocalUser.user_type` property. The enum `LocalUserType` has been added for supported types of `Human` and `ServiceAccount`
+
 ## v1.1.3
 * Minor fix for API retry to support latest Python requests version
-* Removes validation that permissions and assignments are present before push to support identity only submissions 
+* Removes validation that permissions and assignments are present before push to support identity only submissions
 
 ## v1.1.2
 * Update to allowed characters for Tag keys. Tag keys can only contain numbers, letters and the _ character. `OAATemplateException` is raised for invalid characters in Tag key or value.

@@ -9,7 +9,7 @@ https://opensource.org/licenses/MIT.
 import logging
 from logging import NullHandler
 
-__version__ = "1.1.3"
+__version__ = "1.1.4"
 
 # add null handler if calling class isn't logging
 logging.getLogger(__name__).addHandler(NullHandler())

@@ -6,8 +6,9 @@ import pytest
 
 from oaaclient.client import OAAClient, OAAClientError
 
+logging.basicConfig(format='%(asctime)s %(levelname)s - %(name)s - %(message)s', level=logging.DEBUG)
+logging.getLogger("urllib3").setLevel(logging.INFO)
 log = logging.getLogger()
-log.setLevel(logging.DEBUG)
 
 @pytest.fixture(scope="module")
 def veza_con():

@@ -817,6 +817,10 @@ class Identity():
         self.property_definitions.validate_property_name(property_name, entity_type=self.identity_type)
         self.properties[property_name] = property_value
 
+class LocalUserType(str, Enum):
+    """ Enum for """
+    Human = "human"
+    ServiceAccount = "service_account"
 
 class LocalUser(Identity):
     """ LocalUser identity, derived from Identity base class.
@@ -846,6 +850,7 @@ class LocalUser(Identity):
         last_login_at (str): RFC3339 time stamp for last login
         deactivated_at (str): RFC3339 for user deactivate time
         password_last_changed_at (str): RFC3339 time stamp for last password change
+        user_type (LocalUserType): Set the local user account type
     """
 
     def __init__(self, name: str, identities: List[str] = None, groups: List[str] = None, unique_id: str = None, property_definitions: ApplicationPropertyDefinitions = None) -> None:
@@ -859,6 +864,7 @@ class LocalUser(Identity):
         self.last_login_at = None
         self.deactivated_at = None
         self.password_last_changed_at = None
+        self.user_type = None
 
     def __str__(self) -> str:
         return f"Local User - {self.name} ({self.unique_id})"
@@ -923,6 +929,7 @@ class LocalUser(Identity):
                 "last_login_at": self.last_login_at,
                 "deactivated_at": self.deactivated_at,
                 "password_last_changed_at":  self.password_last_changed_at,
+                "user_type": self.user_type,
                 "tags": [tag.__dict__ for tag in self.tags],
                 "custom_properties": self.properties
                 }
