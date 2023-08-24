@@ -53,6 +53,8 @@ def generate_app():
                                               ],
                               resource_types=["thing"])
 
+    app.add_custom_permission("Unknown Permission", [OAAPermission.Uncategorized])
+
     # define one property of every type
     app.property_definitions.define_local_user_property("is_guest", OAAPropertyType.BOOLEAN)
     app.property_definitions.define_local_user_property("user_id", OAAPropertyType.NUMBER)
@@ -121,7 +123,7 @@ def generate_app():
     role1.set_property("custom", True)
 
     role3 = app.add_local_role("role3")
-    role3.add_permissions(["manage"])
+    role3.add_permissions(["manage", "Unknown Permission"])
     role3.set_property("role_id", 3)
     role3.add_role("role2")
 
@@ -370,7 +372,8 @@ GENERATED_APP_PAYLOAD = """
         {
           "name": "role3",
           "permissions": [
-            "manage"
+            "manage",
+            "Unknown Permission"
           ],
           "roles": ["role2"],
           "tags": [],
@@ -499,6 +502,14 @@ GENERATED_APP_PAYLOAD = """
       ],
       "apply_to_sub_resources": false,
       "resource_types": ["thing"]
+    },
+    {
+      "name": "Unknown Permission",
+      "permission_type": [
+        "Uncategorized"
+      ],
+      "apply_to_sub_resources": false,
+      "resource_types": []
     }
   ],
   "identity_to_permissions": [

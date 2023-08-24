@@ -753,6 +753,21 @@ class OAAClient():
 
         return result
 
+    def api_patch(self, api_path:str, data: dict, params: dict = None) -> dict:
+        """Perform REST API PATCH operation.
+
+        Args:
+            api_path (str): API Path API path relative to Veza URL
+
+        Raises:
+            OAAResponseError: API returned an error
+            OAAConnectionError: Connection error during HTTP operation
+
+        Returns:
+            dict: API response from call
+        """
+        return self._perform_request(method="PATCH", api_path=api_path, data=data, params=params)
+
     def api_delete(self, api_path:str, params: dict = None) -> dict:
         """Perform REST API DELETE operation.
 

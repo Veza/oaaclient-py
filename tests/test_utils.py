@@ -102,3 +102,17 @@ def test_create_report(veza_con):
 
     return
 
+
+def test_truncate_string() -> None:
+    """ Since the Veza API measures strings in bytes ensure that the encoded length
+     of the string after truncating is less than or equal to the truncate bytes """
+
+    # length to truncate too
+    byte_length = 256
+
+    bad_string = """ด้้้้้็็็็็้้้้้็็็็ ด้้้้้็็็็็้้้้้็็็็ ด้้้้้็็็็็้้้้้็็็็ ด้้้้้็็็็็้้้้้็็็็ ด้้้้้็็็็็้้้้้็็็็ ด้้้้้็็็็็้้้้้็็็็"""
+
+    truncated = utils.truncate_string(bad_string, length=byte_length)
+
+    assert len(bad_string.encode("utf-8")) > byte_length
+    assert len(truncated.encode("utf-8")) <= byte_length

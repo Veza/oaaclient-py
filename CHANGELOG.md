@@ -1,5 +1,11 @@
 # OAA Client Change Log
 
+## v1.1.5
+* Added new canonical permission `Uncategorized` for Custom Applications to use when customer permission's canonical effect is not known.
+* Added `OAAClient.api_patch(api_path:str, data: dict, params: dict = None)` call to support calling API PATCH operations.
+* Added `OAACLient.utils.truncate_string` to truncate strings to specific character length matching Veza template validation. Specifically required when strings contain non-UTF-8 characters.
+* `set_property` methods for entities now support optional `ignore_none` which will skip setting the property if the property value is `None`
+
 ## v1.1.4
 * Added support for setting LocalUser "User Type" property. Property can be set by `LocalUser.user_type` property. The enum `LocalUserType` has been added for supported types of `Human` and `ServiceAccount`
 

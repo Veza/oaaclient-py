@@ -156,3 +156,26 @@ def build_report(veza_con, report_definition: dict) -> dict:
             response = veza_con.add_query_report(report_id=report_id, query_id=query_id)
 
     return response
+
+
+def truncate_string(source_str: str, length: int = 256) -> str:
+    """Helper function to truncate strings
+
+    Helper function to truncate strings to conform to maximum length requirements for templates.
+
+    Returns a string that is the first N bytes of the source string
+
+    Args:
+        source_str (str): Source string to truncate
+        length (int, optional): Length to shorten to. Defaults to 256.
+
+    Returns:
+        str: truncated string
+    """
+
+    encoded = source_str.encode(encoding="utf-8", errors="replace")
+    truncated = encoded[:length]
+
+    result = truncated.decode(encoding="utf-8", errors="ignore")
+
+    return result

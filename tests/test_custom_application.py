@@ -276,6 +276,7 @@ def test_custom_properties():
 
     # define and set properties for user, group and role
     app.property_definitions.define_local_user_property("guest", OAAPropertyType.BOOLEAN)
+    app.property_definitions.define_local_user_property("login", OAAPropertyType.STRING)
     bob = app.add_local_user("bob")
     bob.set_property("guest", True)
 
@@ -285,6 +286,8 @@ def test_custom_properties():
     assert "unset" in e.value.message
 
     sue = app.add_local_user("sue")
+    sue.set_property("login", "sue1")
+    sue.set_property("guest", None, ignore_none=True)
 
     app.property_definitions.define_local_group_property("group_email", OAAPropertyType.STRING)
     admins = app.add_local_group("admins")
@@ -350,6 +353,13 @@ def test_custom_properties():
             break
     assert bob_payload["custom_properties"]["guest"] is True
 
+    sue_payload = None
+    for user in app_payload["local_users"]:
+      if user["name"] == "sue":
+          sue_payload = user
+          break
+    assert sue_payload["custom_properties"].get("guest") is None
+
     admins_payload = None
     for group in app_payload["local_groups"]:
         if group["name"] == "admins":
@@ -380,7 +390,8 @@ CUSTOM_PROPERTIES_PAYLOAD = """
           "version": "STRING"
         },
         "local_user_properties": {
-          "guest": "BOOLEAN"
+          "guest": "BOOLEAN",
+          "login": "STRING"
         },
         "local_group_properties": {
           "group_email": "STRING"
@@ -413,7 +424,10 @@ CUSTOM_PROPERTIES_PAYLOAD = """
           }
         },
         {
-          "name": "sue"
+          "name": "sue",
+          "custom_properties": {
+            "login": "sue1"
+          }
         }
       ],
       "local_groups": [

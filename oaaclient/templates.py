@@ -40,6 +40,7 @@ class OAAPermission(str, Enum):
     MetadataCreate = "MetadataCreate"
     MetadataDelete = "MetadataDelete"
     NonData = "NonData"
+    Uncategorized = "Uncategorized"
 
     def __repr__(self) -> str:
         return f'{self.__class__.__name__}.{self.name}'
@@ -379,7 +380,7 @@ class CustomApplication(Application):
         if tag not in self.tags:
             self.tags.append(tag)
 
-    def set_property(self, property_name: str, property_value: any) -> None:
+    def set_property(self, property_name: str, property_value: any, ignore_none: bool = False) -> None:
         """ Set a custom property value for the application.
 
         Property name must be defined for `CustomApplication` before calling set_property. See example below and
@@ -388,6 +389,7 @@ class CustomApplication(Application):
         Args:
             property_name (str): Name of property to set value for, property names must be defined as part of the application property_definitions
             property_value (Any): Value for property, type should match OAAPropertyType for property definition
+            ignore_none (bool, optional): Do not set property if value is None. Defaults to False.
 
         Raises:
             OAATemplateException: If property name is not defined
@@ -401,6 +403,10 @@ class CustomApplication(Application):
         # validate property name is defined, validate_property_name will raise exception if not
         if not self.property_definitions:
             raise OAATemplateException(f"No custom properties defined, cannot set value for property {property_name}")
+
+        if ignore_none and property_value is None:
+            return
+
         self.property_definitions.validate_property_name(property_name, "application")
         self.properties[property_name] = property_value
 
@@ -611,7 +617,7 @@ class CustomResource():
         if tag not in self.tags:
             self.tags.append(tag)
 
-    def set_property(self, property_name: str, property_value: any) -> None:
+    def set_property(self, property_name: str, property_value: any, ignore_none: bool = False) -> None:
         """ Set the value for a custom property on a resource or sub-resource.
 
         Property name must be defined for resource type before calling `set_property()`. See example below and
@@ -620,6 +626,7 @@ class CustomResource():
         Args:
             property_name (str): Name of property to set value for
             property_value (Any): Value for property, type should match OAAPropertyType for property definition
+            ignore_none (bool, optional): Do not set property if value is None. Defaults to False.
 
         Raises:
             OAATemplateException: If `property_name` is not defined
@@ -634,6 +641,10 @@ class CustomResource():
         # validate property name is defined, validate_property_name will raise exception if not
         if not self.property_definitions:
             raise OAATemplateException(f"No custom properties defined, cannot set value for property {property_name}")
+
+        if ignore_none and property_value is None:
+            return
+
         self.property_definitions.validate_property_name(property_name, "resource", self.resource_type)
         self.properties[property_name] = property_value
 
@@ -788,7 +799,7 @@ class Identity():
         if tag not in self.tags:
             self.tags.append(tag)
 
-    def set_property(self, property_name: str, property_value: any) -> None:
+    def set_property(self, property_name: str, property_value: any, ignore_none: bool = False) -> None:
         """ Set a custom defined property to a specific value on an identity.
 
         Property name must be defined for identity type before calling `set_property()`. See example below for `LocalUser`
@@ -799,6 +810,7 @@ class Identity():
         Args:
             property_name (str): Name of property to set value for
             property_value (Any): Value for property, type should match `OAAPropertyType` for property definition
+            ignore_none (bool, optional): Do not set property if value is None. Defaults to False.
 
         Raises:
             OAATemplateException: If property with `property_name` is not defined.
@@ -813,6 +825,9 @@ class Identity():
 
         if not self.property_definitions:
             raise OAATemplateException("No custom property definitions found for entity")
+
+        if ignore_none and property_value is None:
+            return
 
         self.property_definitions.validate_property_name(property_name, entity_type=self.identity_type)
         self.properties[property_name] = property_value
@@ -1044,7 +1059,7 @@ class IdPIdentity(Identity):
     def __repr__(self) -> str:
         return f"IdPIdentity(name={self.name!r})"
 
-    def set_property(self, property_name: str, property_value: any) -> None:
+    def set_property(self, property_name: str, property_value: any, ignore_none: bool = False) -> None:
         """ Set custom IdP property (no functionality).
 
         IdP identities do not support custom properties since the identity is discovered through the provider (Okta, Azure, etc)
@@ -1142,7 +1157,7 @@ class LocalRole():
         if tag not in self.tags:
             self.tags.append(tag)
 
-    def set_property(self, property_name: str, property_value: any) -> None:
+    def set_property(self, property_name: str, property_value: any, ignore_none: bool = False) -> None:
         """ Set the value for custom property on a local role.
 
         Property name must be defined for local roles before calling `set_property()`. See example below and
@@ -1151,6 +1166,7 @@ class LocalRole():
         Args:
             property_name (str): Name of property to set value for
             property_value (Any): Value for property, type should match OAAPropertyType for property definition
+            ignore_none (bool, optional): Do not set property if value is None. Defaults to False.
 
         Raises:
             OAATemplateException: If property name is not defined.
@@ -1165,6 +1181,10 @@ class LocalRole():
         # validate property name is defined, validate_property_name will raise exception if not
         if not self.property_definitions:
             raise OAATemplateException(f"No custom properties defined, cannot set value for property {property_name}")
+
+        if ignore_none and property_value is None:
+            return
+
         self.property_definitions.validate_property_name(property_name, "local_role")
         self.properties[property_name] = property_value
 
@@ -1627,7 +1647,7 @@ class CustomIdPDomain():
 
         return domain
 
-    def set_property(self, property_name: str, property_value: any) -> None:
+    def set_property(self, property_name: str, property_value: any, ignore_none: bool = False) -> None:
         """ Set custom property value for domain.
 
         Property name must be defined for domain before calling `set_property()`. See example below and
@@ -1636,6 +1656,7 @@ class CustomIdPDomain():
         Args:
             property_name (str): Name of property
             property_value (Any): Value for property, type should match OAAPropertyType for property definition
+            ignore_none (bool, optional): Do not set property if value is None. Defaults to False.
 
         Raises:
             OAATemplateException: If property with `property_name` is not defined.
@@ -1648,6 +1669,9 @@ class CustomIdPDomain():
 
         if not self.__property_definitions:
             raise OAATemplateException("No custom property definitions found for domain")
+
+        if ignore_none and property_value is None:
+            return
 
         self.__property_definitions.validate_property_name(property_name, entity_type=IdPEntityType.DOMAIN)
         self.__properties[property_name] = property_value
@@ -1774,7 +1798,7 @@ class CustomIdPUser():
 
         return
 
-    def set_property(self, property_name: str, property_value: any) -> None:
+    def set_property(self, property_name: str, property_value: any, ignore_none: bool = False) -> None:
         """ Set custom property value for user.
 
         Property name must be defined for users before calling `set_property()`. See example below and
@@ -1783,6 +1807,7 @@ class CustomIdPUser():
         Args:
             property_name (str): Name of property
             property_value (Any): Value for property, type should match OAAPropertyType for property definition
+            ignore_none (bool, optional): Do not set property if value is None. Defaults to False.
 
         Raises:
             OAATemplateException: If property with `property_name` is not defined.
@@ -1796,6 +1821,9 @@ class CustomIdPUser():
 
         if not self.__property_definitions:
             raise OAATemplateException("No custom property definitions found for user")
+
+        if ignore_none and property_value is None:
+            return
 
         self.__property_definitions.validate_property_name(property_name, entity_type=IdPEntityType.USER)
         self.__properties[property_name] = property_value
@@ -1894,7 +1922,7 @@ class CustomIdPGroup():
 
         return
 
-    def set_property(self, property_name: str, property_value: any) -> None:
+    def set_property(self, property_name: str, property_value: any, ignore_none: bool = False) -> None:
         """ Set custom property value for group.
 
         Property name must be defined for groups before calling `set_property()`. See example below and
@@ -1903,6 +1931,7 @@ class CustomIdPGroup():
         Args:
             property_name (str): Name of property
             property_value (Any): Value for property, type should match OAAPropertyType for property definition
+            ignore_none (bool, optional): Do not set property if value is None. Defaults to False.
 
         Raises:
             OAATemplateException: If property with `property_name` is not defined.
@@ -1916,6 +1945,9 @@ class CustomIdPGroup():
 
         if not self.__property_definitions:
             raise OAATemplateException("No custom property definitions found for group")
+
+        if ignore_none and property_value is None:
+            return
 
         self.__property_definitions.validate_property_name(property_name, entity_type=IdPEntityType.GROUP)
         self.__properties[property_name] = property_value
