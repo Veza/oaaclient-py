@@ -1628,9 +1628,9 @@ class CustomIdPDomain():
 
     def __init__(self, name: str, property_definitions: IdPPropertyDefinitions = None) -> None:
         self.name = name
-        self.__tags = []
-        self.__properties = {}
-        self.__property_definitions = property_definitions
+        self._tags = []
+        self._properties = {}
+        self._property_definitions = property_definitions
 
     def __str__(self) -> str:
         return f"Custom IdP Domain {self.name}"
@@ -1642,8 +1642,8 @@ class CustomIdPDomain():
         """ Output function for payload. """
         domain = {}
         domain['name'] = self.name
-        domain['tags'] = self.__tags
-        domain['custom_properties'] = self.__properties
+        domain['tags'] = [tag.__dict__ for tag in self._tags]
+        domain['custom_properties'] = self._properties
 
         return domain
 
@@ -1667,15 +1667,26 @@ class CustomIdPDomain():
             >>> idp.domain.set_property(property_name="my_property", property_value="domain property value")
         """
 
-        if not self.__property_definitions:
+        if not self._property_definitions:
             raise OAATemplateException("No custom property definitions found for domain")
 
         if ignore_none and property_value is None:
             return
 
-        self.__property_definitions.validate_property_name(property_name, entity_type=IdPEntityType.DOMAIN)
-        self.__properties[property_name] = property_value
+        self._property_definitions.validate_property_name(property_name, entity_type=IdPEntityType.DOMAIN)
+        self._properties[property_name] = property_value
 
+    def add_tag(self, key: str, value: str = "") -> None:
+        """ Add a new tag to IdP Domain.
+
+        Args:
+            key (str): Key for tag, aka name. Must be present and must be letters, numbers or _ (underscore) only.
+            value (str, optional): Value for Tag, will appear in Veza as `key:value`. Must be letters, numbers, whitespace and the special characters @,._- only. Defaults to "".
+        """
+
+        tag = Tag(key=key, value=value)
+        if tag not in self._tags:
+            self._tags.append(tag)
 
 class CustomIdPUser():
     """ User model for CustomIdPProvider.
@@ -1709,12 +1720,12 @@ class CustomIdPUser():
         self.is_guest = None
         self.manager_id = None
 
-        self.__source_identity = None
-        self.__groups = {}
-        self.__assumed_roles = {}
-        self.__tags = []
-        self.__properties = {}
-        self.__property_definitions = property_definitions
+        self._source_identity = None
+        self._groups = {}
+        self._assumed_roles = {}
+        self._tags = []
+        self._properties = {}
+        self._property_definitions = property_definitions
 
     def __str__(self) -> str:
         return f"IdP User - {self.name} ({self.identity})"
@@ -1737,12 +1748,12 @@ class CustomIdPUser():
         user['is_active'] = self.is_active
         user['is_guest'] = self.is_guest
         user['manager_id'] = self.manager_id
-        user['groups'] = [g for g in self.__groups.values()]
-        user['assumed_role_arns'] = [r for r in self.__assumed_roles.values()]
+        user['groups'] = [g for g in self._groups.values()]
+        user['assumed_role_arns'] = [r for r in self._assumed_roles.values()]
 
-        user['source_identity'] = self.__source_identity
-        user['tags'] = self.__tags
-        user['custom_properties'] = self.__properties
+        user['source_identity'] = self._source_identity
+        user['tags'] = [tag.__dict__ for tag in self._tags]
+        user['custom_properties'] = self._properties
 
         return user
 
@@ -1761,7 +1772,7 @@ class CustomIdPUser():
         if not isinstance(provider_type, IdPProviderType):
             raise OAATemplateException("provider_type must be IdPProviderType enum")
 
-        self.__source_identity = {"identity": identity, "provider_type": provider_type}
+        self._source_identity = {"identity": identity, "provider_type": provider_type}
         return None
 
     def add_assumed_role_arns(self, arns: List[str]) -> None:
@@ -1776,8 +1787,8 @@ class CustomIdPUser():
             raise OAATemplateException("arns must be of type list")
 
         for arn in arns:
-            if arn not in self.__assumed_roles:
-                self.__assumed_roles[arn] = {"identity": arn}
+            if arn not in self._assumed_roles:
+                self._assumed_roles[arn] = {"identity": arn}
 
         return
 
@@ -1793,8 +1804,8 @@ class CustomIdPUser():
             raise OAATemplateException("group_identities must be list")
 
         for group in group_identities:
-            if group not in self.__groups:
-                self.__groups[group] = {"identity": group}
+            if group not in self._groups:
+                self._groups[group] = {"identity": group}
 
         return
 
@@ -1819,15 +1830,26 @@ class CustomIdPUser():
             >>> user1.set_property("my_property", "user1 value")
         """
 
-        if not self.__property_definitions:
+        if not self._property_definitions:
             raise OAATemplateException("No custom property definitions found for user")
 
         if ignore_none and property_value is None:
             return
 
-        self.__property_definitions.validate_property_name(property_name, entity_type=IdPEntityType.USER)
-        self.__properties[property_name] = property_value
+        self._property_definitions.validate_property_name(property_name, entity_type=IdPEntityType.USER)
+        self._properties[property_name] = property_value
 
+    def add_tag(self, key: str, value: str = "") -> None:
+        """ Add a new tag to IdP User.
+
+        Args:
+            key (str): Key for tag, aka name. Must be present and must be letters, numbers or _ (underscore) only.
+            value (str, optional): Value for Tag, will appear in Veza as `key:value`. Must be letters, numbers, whitespace and the special characters @,._- only. Defaults to "".
+        """
+
+        tag = Tag(key=key, value=value)
+        if tag not in self._tags:
+            self._tags.append(tag)
 
 class CustomIdPGroup():
     """ Group model for CustomIdPProvider.
@@ -1852,11 +1874,11 @@ class CustomIdPGroup():
 
         self.is_security_group = None
 
-        self.__groups = {}
-        self.__assumed_roles = {}
-        self.__tags = []
-        self.__properties = {}
-        self.__property_definitions = property_definitions
+        self._groups = {}
+        self._assumed_roles = {}
+        self._tags = []
+        self._properties = {}
+        self._property_definitions = property_definitions
 
     def __str__(self) -> str:
         return f"IdP Group {self.name} ({self.identity})"
@@ -1876,11 +1898,11 @@ class CustomIdPGroup():
 
         group['full_name'] = self.full_name
         group['is_security_group'] = self.is_security_group
-        group['assumed_role_arns'] = [r for r in self.__assumed_roles.values()]
-        group['groups'] = [g for g in self.__groups.values()]
+        group['assumed_role_arns'] = [r for r in self._assumed_roles.values()]
+        group['groups'] = [g for g in self._groups.values()]
 
-        group['tags'] = self.__tags
-        group['custom_properties'] = self.__properties
+        group['tags'] = [tag.__dict__ for tag in self._tags]
+        group['custom_properties'] = self._properties
 
         return group
 
@@ -1896,8 +1918,8 @@ class CustomIdPGroup():
             raise OAATemplateException("arns must be of type list")
 
         for arn in arns:
-            if arn not in self.__assumed_roles:
-                self.__assumed_roles[arn] = {"identity": arn}
+            if arn not in self._assumed_roles:
+                self._assumed_roles[arn] = {"identity": arn}
 
         return
 
@@ -1917,8 +1939,8 @@ class CustomIdPGroup():
         for group_identity in group_identities:
             if (self.identity and group_identity == self.identity) or (not self.identity and group_identity == self.name):
                 raise OAATemplateException(f"Cannot add a group to itself '{group_identity}'")
-            if group_identity not in self.__groups:
-                self.__groups[group_identity] = {"identity": group_identity}
+            if group_identity not in self._groups:
+                self._groups[group_identity] = {"identity": group_identity}
 
         return
 
@@ -1943,15 +1965,26 @@ class CustomIdPGroup():
             >>> group1.set_property("my_property", "group1 value")
         """
 
-        if not self.__property_definitions:
+        if not self._property_definitions:
             raise OAATemplateException("No custom property definitions found for group")
 
         if ignore_none and property_value is None:
             return
 
-        self.__property_definitions.validate_property_name(property_name, entity_type=IdPEntityType.GROUP)
-        self.__properties[property_name] = property_value
+        self._property_definitions.validate_property_name(property_name, entity_type=IdPEntityType.GROUP)
+        self._properties[property_name] = property_value
 
+    def add_tag(self, key: str, value: str = "") -> None:
+        """ Add a new tag to IdP Group.
+
+        Args:
+            key (str): Key for tag, aka name. Must be present and must be letters, numbers or _ (underscore) only.
+            value (str, optional): Value for Tag, will appear in Veza as `key:value`. Must be letters, numbers, whitespace and the special characters @,._- only. Defaults to "".
+        """
+
+        tag = Tag(key=key, value=value)
+        if tag not in self._tags:
+            self._tags.append(tag)
 
 class IdPPropertyDefinitions():
     """

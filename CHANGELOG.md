@@ -1,5 +1,8 @@
 # OAA Client Change Log
 
+## v1.1.6
+* Tagging support for CustomIdP entities. IdP Users, Groups and Domains now support `.add_tag(key: str, value: str = "")` method to set the tag key and optional value.
+
 ## v1.1.5
 * Added new canonical permission `Uncategorized` for Custom Applications to use when customer permission's canonical effect is not known.
 * Added `OAAClient.api_patch(api_path:str, data: dict, params: dict = None)` call to support calling API PATCH operations.

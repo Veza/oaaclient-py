@@ -130,6 +130,7 @@ def build_report(veza_con, report_definition: dict) -> dict:
             log.debug(f"Found existing query with same name, using for report, {query['name']}")
             query_ids.append(query_names[query["name"]])
         else:
+            log.debug(f"Creating query {query['name']}")
             response = veza_con.create_query(query=query)
             query_ids.append(response["id"])
 

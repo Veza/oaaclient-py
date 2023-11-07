@@ -13,6 +13,9 @@ import os
 import uuid
 import pytest
 
+from generate_app import generate_app
+from oaaclient.client import OAAClient
+
 # enable debug logging
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger()
@@ -70,7 +73,17 @@ def test_encode_icon_file():
 
 
 @pytest.mark.skipif(not os.getenv("PYTEST_VEZA_HOST"), reason="Test host is not configured")
-def test_create_report(veza_con):
+def test_create_report(veza_con: OAAClient):
+
+    app = generate_app()
+    provider_name = f"Pytest Report test {uuid.uuid4()}"
+
+    provider = veza_con.create_provider(provider_name, custom_template="application")
+    veza_con.push_application(provider_name=provider_name,
+                              data_source_name="report_test",
+                              application_object=app,
+                              )
+
     # load the test report
     with open("tests/report_test.json") as f:
         report_definition_orign = json.load(f)
@@ -99,6 +112,8 @@ def test_create_report(veza_con):
         query_id = e.get("query")
         # force the deletion of the query since the report delete may not be processed
         veza_con.delete_query(query_id, force=True)
+
+    veza_con.delete_provider(provider["id"])
 
     return
 

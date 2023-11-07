@@ -134,3 +134,6 @@ dmypy.json
 
 # VSCode working directory
 .vscode
+
+# Intellij working directory
+.idea/

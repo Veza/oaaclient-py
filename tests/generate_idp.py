@@ -25,6 +25,7 @@ def generate_idp():
     idp.property_definitions.define_domain_property("region", OAAPropertyType.STRING)
 
     idp.domain.set_property("region", "US")
+    idp.domain.add_tag("domain_tag")
 
     user0001 = idp.add_user("user0001", "User 0001", "user001@example.com", "0001")
     user0002 = idp.add_user("user0002", "User 0002", "user002@example.com", "0002")
@@ -44,15 +45,18 @@ def generate_idp():
     user0001.set_property("birthday", "2001-01-01T01:01:01.001Z")
     user0001.set_source_identity("user0001@corp.example.com", IdPProviderType.OKTA)
     user0001.add_assumed_role_arns(["arn:aws:iam::123456789:role/BackEnd"])
+    user0001.add_tag("tagnovalue")
 
     user0002.department = "Sales"
     user0002.is_active = False
     user0002.is_guest = True
     user0002.set_source_identity("user0002@corp.example.com", IdPProviderType.AZURE_AD)
+    user0002.add_tag("tagwithvalue", "somevalue")
 
     group001 = idp.add_group("group001", "Group 001", "g001")
     group001.set_property("owner", "somebody")
     group001.add_assumed_role_arns(["arn:aws:iam::123456789:role/Group001"])
+    group001.add_tag("grouptag", "iamagroup")
 
     idp.add_group(name="group002", full_name="Group 002", identity="g002")
     idp.add_group(name="group003", full_name="Group 003", identity="g003")
@@ -94,7 +98,12 @@ GENERATED_IDP_PAYLOAD = """
   "domains": [
     {
       "name": "example.com",
-      "tags": [],
+      "tags": [
+        {
+          "key": "domain_tag",
+          "value": ""
+        }
+      ],
       "custom_properties": {
         "region": "US"
       }
@@ -124,8 +133,12 @@ GENERATED_IDP_PAYLOAD = """
         "identity": "user0001@corp.example.com",
         "provider_type": "okta"
       },
-      "tags": [],
-      "custom_properties": {
+      "tags": [
+        {
+          "key": "tagnovalue",
+          "value": ""
+        }
+      ],      "custom_properties": {
         "contractor": false,
         "parking_spaces": 1,
         "cube_number": "East-224",
@@ -158,8 +171,12 @@ GENERATED_IDP_PAYLOAD = """
         "identity": "user0002@corp.example.com",
         "provider_type": "azure_ad"
       },
-      "tags": [],
-      "custom_properties": {}
+      "tags": [
+        {
+          "key": "tagwithvalue",
+          "value": "somevalue"
+        }
+      ],      "custom_properties": {}
     },
     {
       "name": "user0003",
@@ -249,8 +266,12 @@ GENERATED_IDP_PAYLOAD = """
         }
       ],
       "groups": [],
-      "tags": [],
-      "custom_properties": {
+      "tags": [
+        {
+          "key": "grouptag",
+          "value": "iamagroup"
+        }
+      ],      "custom_properties": {
         "owner": "somebody"
       }
     },
