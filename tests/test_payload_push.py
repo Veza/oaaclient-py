@@ -7,16 +7,18 @@ https://opensource.org/licenses/MIT.
 """
 
 import os
-import pytest
 import re
 import time
+import uuid
 
-from oaaclient.client import OAAClient, OAAClientError
-import oaaclient.utils as utils
-
+import pytest
 from generate_app import generate_app
-from generate_idp import generate_idp
 from generate_app_id_mapping import generate_app_id_mapping
+from generate_hris import generate_hris
+from generate_idp import generate_idp
+
+import oaaclient.utils as utils
+from oaaclient.client import OAAClient, OAAClientError
 
 # set the timeout for the push tests, if the the datasource does not parse
 TEST_TIMEOUT = os.getenv("OAA_PUSH_TIMEOUT", 300)
@@ -111,6 +113,27 @@ def test_payload_push_compressed(veza_con, app_provider):
             time.sleep(4)
 
 
+@pytest.mark.skipif(not os.getenv("PYTEST_VEZA_HOST"), reason="Test host is not configured")
+@pytest.mark.timeout(TEST_TIMEOUT)
+def test_push_provider_create(veza_con: OAAClient):
+    # make sure compression is disabled
+    app = generate_app()
+
+    data_source_name = os.environ.get('PYTEST_CURRENT_TEST').replace("/", "-")
+    provider_name = f"Pytest Provider {uuid.uuid4()}"
+    response = veza_con.push_application(provider_name=provider_name,
+                                           data_source_name=data_source_name,
+                                           application_object=app,
+                                           create_provider=True
+                                        )
+    if not response:
+        assert False
+
+    got_provider = veza_con.get_provider(provider_name)
+    assert got_provider is not None
+    assert "id" in got_provider
+
+    veza_con.delete_provider(got_provider["id"])
 
 @pytest.mark.skipif(not os.getenv("PYTEST_VEZA_HOST"), reason="Test host is not configured")
 @pytest.mark.timeout(TEST_TIMEOUT)
@@ -199,6 +222,39 @@ def test_idp_payload_push(veza_con, idp_provider):
 
     while True:
         data_source = veza_con.get_data_source(data_source_name, provider_id=idp_provider["id"])
+        if data_source["status"] == "SUCCESS":
+            break
+        elif FAILURE_REGEX.match(data_source["status"]):
+            print(data_source)
+            assert False, "Datasource parsing failure"
+        else:
+            time.sleep(4)
+
+    return
+
+@pytest.mark.skipif(not os.getenv("PYTEST_VEZA_HOST"), reason="Test host is not configured")
+@pytest.mark.timeout(TEST_TIMEOUT)
+def test_hris_payload_push(veza_con, hris_provider):
+
+    hris = generate_hris()
+
+    data_source_name = os.environ.get('PYTEST_CURRENT_TEST').replace("/", "-")
+    response = veza_con.push_application(hris_provider['name'],
+                                           data_source_name=data_source_name,
+                                           application_object=hris
+                                           )
+    if not response:
+        assert False
+
+    # print out any warnigns from the push for debugging puproses, warnings are not a failure, warnings will include
+    # being unable to find fake identities
+    if response.get("warnings", None):
+        print("Push warnings:")
+        for e in response["warnings"]:
+            print(f"  - {e}")
+
+    while True:
+        data_source = veza_con.get_data_source(data_source_name, provider_id=hris_provider["id"])
         if data_source["status"] == "SUCCESS":
             break
         elif FAILURE_REGEX.match(data_source["status"]):

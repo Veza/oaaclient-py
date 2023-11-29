@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Copyright 2022 Veza Technologies Inc.
 
@@ -5,7 +6,10 @@ Use of this source code is governed by the MIT
 license that can be found in the LICENSE file or at
 https://opensource.org/licenses/MIT.
 """
+import logging
+import sys
 
+from oaaclient.client import OAAClient, OAAClientError
 from oaaclient.templates import CustomIdPProvider, OAAPropertyType, IdPProviderType
 
 
@@ -74,6 +78,37 @@ def generate_idp():
     idp.groups["g002"].add_groups(["g003", "g004"])
 
     return idp
+
+def main():
+  log.info("Generate App Main")
+  # assumes VEZA_URL and VEZA_API_KEY are set in env
+  try:
+    con = OAAClient()
+  except (OAAClientError, ValueError) as e:
+     log.error(e)
+     log.error("exiting")
+     sys.exit(1)
+
+  log.info("Connected to tenant")
+  app = generate_idp()
+  log.info("App loaded")
+  try:
+     log.info("Pushing")
+     con.push_application(provider_name="Generate IDP", data_source_name="generate_idp", application_object=app, create_provider=True)
+  except OAAClientError as error:
+      log.error(f"{error.error}: {error.message} ({error.status_code})")
+      if hasattr(error, "details"):
+          for detail in error.details:
+              log.error(f"  {detail}")
+
+  log.info("Complete")
+
+  return
+
+
+if __name__ == "__main__":
+  log = logging.getLogger()
+  main()
 
 
 GENERATED_IDP_PAYLOAD = """

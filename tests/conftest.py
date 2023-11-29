@@ -59,3 +59,22 @@ def idp_provider(veza_con):
     yield provider
 
     veza_con.delete_provider(provider["id"])
+
+@pytest.fixture(scope="module")
+def hris_provider(veza_con):
+    """Custom Application Provider
+
+    Yields a custom application provider that can be used for any test that push to an application,
+    deletes the provider after yield
+
+    Args:
+        veza_con (_type_): _description_
+
+    Yields:
+        _type_: _description_
+    """
+    provider_name = f"Pytest HRIS {uuid.uuid4()}"
+    provider = veza_con.create_provider(provider_name, "hris")
+    yield provider
+
+    veza_con.delete_provider(provider["id"])

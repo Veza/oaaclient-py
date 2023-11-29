@@ -433,14 +433,14 @@ class OAAClient():
 
         return result
 
-    def push_application(self, provider_name: str, data_source_name: str, application_object: CustomApplication|CustomIdPProvider, save_json=False) -> dict:
+    def push_application(self, provider_name: str, data_source_name: str, application_object: CustomApplication|CustomIdPProvider, save_json: bool = False, create_provider: bool = False) -> dict:
         """Push an OAA Application Object (such as CustomApplication).
 
-        Extracts the OAA JSON payload from the supplied OAA class (e.g. CustomApplication, CustomIdPProvider) and push to
+        Extracts the OAA JSON payload from the supplied OAA class (e.g. CustomApplication, CustomIdPProvider, etc) and push to
         the supplied Data Source.
 
-        The Provider must be a valid Provider (created ahead of time). A new data source will be created
-        if it does not already exist.
+        The Provider with `provider_name` must be a valid existing Provider or `create_provider` must be set to `True`.  A new data source
+        will be created automatically by default if it does not already exist.
 
         For logging, and debugging, the optional `save_json` flag writes the payload to a local file (before push). Output file name
         is formatted with a timestamp: `{data source name}-{%Y%m%d-%H%M%S}.json`
@@ -450,6 +450,7 @@ class OAAClient():
             data_source_name (str): Name for Data Source (will be created if it doesn't exist).
             application_object (Class): OAA object to extract the payload from
             save_json (bool, optional): Save the JSON payload to a local file before push. Defaults to False.
+            create_provider (bool, optional): Create a new Provider if Provider does not already exists. Defaults to False.
 
         Raises:
             OAAClientError: If any API call returns an error (including errors processing the OAA payload).
@@ -457,7 +458,17 @@ class OAAClient():
         Returns:
             dict: API response from push, including any warnings that are returned.
         """
+
+        if create_provider:
+            if not hasattr(application_object, "TEMPLATE"):
+                raise OAAClientError(error="INVALID_APP", message="Cannot create provider for application object without TEMPLATE")
+
+            provider = self.get_provider(provider_name)
+            if not provider:
+                self.create_provider(provider_name, custom_template=application_object.TEMPLATE)
+
         metadata = application_object.get_payload()
+
         return self.push_metadata(provider_name, data_source_name, metadata, save_json=save_json)
 
     def get_queries(self, include_inactive_queries:bool = True) -> list[dict]:

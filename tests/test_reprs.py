@@ -10,6 +10,7 @@ import pytest
 
 from generate_app import generate_app
 from generate_idp import generate_idp
+from generate_hris import generate_hris
 from oaaclient.templates import Tag
 
 def test_custom_app_reprs() -> None:
@@ -79,3 +80,20 @@ def test_tag_repr() -> None:
     test_tag = Tag("Test")
     assert test_tag.__str__() == "Tag Test"
     assert test_tag.__repr__() == "Tag(key='Test', value='')"
+
+def test_hris_repr() -> None:
+    hris = generate_hris()
+
+    assert hris.__str__() == "HRISProvider Pytest HRIS - PyHRIS"
+    assert hris.__repr__() == "HRISProvider(name='Pytest HRIS', hris_type='PyHRIS', url='example.com')"
+
+    assert hris.system.__str__() == "HRISSystem - Pytest HRIS"
+    assert hris.system.__repr__() == "HRISSystem(name='Pytest HRIS', url='example.com')"
+
+    employee = hris.employees["001"]
+    assert employee.__str__() == "HRISEmployee - employee001 (001)"
+    assert employee.__repr__() == "HRISEmployee(unique_id: '001', name: 'employee001', employee_number: '001', first_name: 'Employee', last_name: 'Fake', is_active: True, employment_status: 'EMPLOYED')"
+
+    group = hris.groups["g001"]
+    assert group.__str__() == "HRISGroup - Group 001 (g001) - Team"
+    assert group.__repr__() == "HRISGroup(unique_id='g001', name='Group 001', group_type='Team')"

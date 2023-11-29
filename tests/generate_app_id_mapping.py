@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Copyright 2022 Veza Technologies Inc.
 
@@ -6,8 +7,16 @@ license that can be found in the LICENSE file or at
 https://opensource.org/licenses/MIT.
 """
 
+import logging
+import sys
 from enum import unique
-from oaaclient.templates import CustomApplication, Tag, OAAPermission, OAAPropertyType
+
+from oaaclient.client import OAAClient, OAAClientError
+from oaaclient.templates import CustomApplication, OAAPermission, OAAPropertyType
+
+logging.basicConfig(format='%(asctime)s %(levelname)s: %(thread)d %(message)s', level=logging.INFO)
+log = logging.getLogger(__name__)
+
 
 def generate_app_id_mapping():
     """ generates a complete OAA custom application payload where local users, groups and roles are mapped by a unique identifier"""
@@ -136,6 +145,37 @@ def generate_app_id_mapping():
     app.local_users[1237].add_permission("manage", resources=[thing1], apply_to_application=True)
 
     return app
+
+def main():
+  log.info("Generate App Main")
+  # assumes VEZA_URL and VEZA_API_KEY are set in env
+  try:
+    con = OAAClient()
+  except (OAAClientError, ValueError) as e:
+     log.error(e)
+     log.error("exiting")
+     sys.exit(1)
+
+  log.info("Connected to tenant")
+  app = generate_app_id_mapping()
+  log.info("App loaded")
+  try:
+     log.info("Pushing")
+     con.push_application(provider_name="App ID Mapping", data_source_name="generate_app_id_mapping", application_object=app, create_provider=True)
+  except OAAClientError as error:
+      log.error(f"{error.error}: {error.message} ({error.status_code})")
+      if hasattr(error, "details"):
+          for detail in error.details:
+              log.error(f"  {detail}")
+
+  log.info("Complete")
+
+  return
+
+
+if __name__ == "__main__":
+  log = logging.getLogger()
+  main()
 
 
 # Full App payload as string
@@ -423,8 +463,7 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
         {
           "application": "pytest unique id app",
           "role": "r1",
-          "apply_to_application": true,
-          "resources": []
+          "apply_to_application": true
         }
       ]
     },

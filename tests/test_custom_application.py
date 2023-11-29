@@ -194,6 +194,8 @@ def test_role_assignments():
 
     # assign user a role to a resource without passing `apply_to_application` and assert user stil has role on appliction
     user.add_role("admin", resources=[thing1])
+    # test that duplicate is a no-op
+    user.add_role("admin", resources=[thing1])
     assert user.role_assignments["admin"]["apply_to_application"] is True
     assert "Thing01" in user.role_assignments["admin"]["resources"]
 
@@ -266,24 +268,11 @@ def test_custom_properties():
     app.properties["contact"] = "billy"
     app.set_property("version", "2022.1.1")
 
-    # validate that an exception is thrown when trying to set an undefined property
-    with pytest.raises(OAATemplateException):
-        app.set_property("not_set", "something")
-
-    # assert define throws an exception when type is not OAAPropertyType enum
-    with pytest.raises(OAATemplateException):
-        app.property_definitions.define_application_property("contact", "string")
-
     # define and set properties for user, group and role
     app.property_definitions.define_local_user_property("guest", OAAPropertyType.BOOLEAN)
     app.property_definitions.define_local_user_property("login", OAAPropertyType.STRING)
     bob = app.add_local_user("bob")
     bob.set_property("guest", True)
-
-    # test getting exception when setting undefined property
-    with pytest.raises(OAATemplateException) as e:
-        bob.set_property("unset", "booo")
-    assert "unset" in e.value.message
 
     sue = app.add_local_user("sue")
     sue.set_property("login", "sue1")
@@ -307,34 +296,11 @@ def test_custom_properties():
 
     cog1 = app.add_resource("cog1", "cog")
 
-    # assert error when no properties are set for resource type at all
-    with pytest.raises(OAATemplateException) as e:
-        cog1.set_property("unset", "anything")
-    assert e.value.message == "No custom properties defined for resource type cog"
 
-    # assert exception when resource has properties, not not the one being set
-    with pytest.raises(OAATemplateException) as e:
-        thing1.set_property("unset", "nothing")
-    assert "unknown property name unset" == e.value.message
-
-    # assert exception raised when invalid name passed
-    with pytest.raises(OAATemplateException) as e:
-        app.property_definitions.define_local_user_property("invalide-name!", OAAPropertyType.STRING)
-
-    with pytest.raises(OAATemplateException) as e:
-        app.property_definitions.define_local_user_property("_cantstart", OAAPropertyType.STRING)
-
-    with pytest.raises(OAATemplateException) as e:
-        app.property_definitions.define_local_user_property(123, OAAPropertyType.STRING)
-
-    with pytest.raises(OAATemplateException) as e:
-        app.property_definitions.define_local_group_property("invalide-name!", OAAPropertyType.STRING)
-
-    with pytest.raises(OAATemplateException) as e:
-        app.property_definitions.define_local_role_property("invalide-name!", OAAPropertyType.STRING)
-
-    with pytest.raises(OAATemplateException) as e:
-        app.property_definitions.define_resource_property("thing", "invalide-name!", OAAPropertyType.STRING)
+    # role assignment properties
+    app.property_definitions.define_role_assignment_property("approver", OAAPropertyType.STRING)
+    bob.add_role("operator", resources=[cog1], assignment_properties={"approver": "me"})
+    bob.add_role("operator", resources=[thing1])
 
     # get payload and validate all expected properties and blocks are present
     payload = app.get_payload()
@@ -378,6 +344,56 @@ def test_custom_properties():
     assert payload == json.loads(CUSTOM_PROPERTIES_PAYLOAD)
 
 
+def test_custom_property_exceptions():
+
+    # app = CustomApplication(name="testapp", application_type="pytest", description="This is a test")
+    app = generate_app()
+
+    # test getting exception when setting undefined property
+    with pytest.raises(OAATemplateException) as e:
+        app.local_users["bob"].set_property("unset", "booo")
+    assert "unset" in e.value.message
+
+      # validate that an exception is thrown when trying to set an undefined property
+    with pytest.raises(OAATemplateException):
+        app.set_property("not_set", "something")
+
+    # assert define throws an exception when type is not OAAPropertyType enum
+    with pytest.raises(OAATemplateException):
+        app.property_definitions.define_application_property("contact", "string")
+
+    cog1 = app.add_resource("cog1", resource_type="cog")
+    # assert error when no properties are set for resource type at all
+    with pytest.raises(OAATemplateException) as e:
+        cog1.set_property("unset", "anything")
+    assert e.value.message == "No custom properties defined for resource type cog"
+
+    # assert exception when resource has properties, not not the one being set
+    with pytest.raises(OAATemplateException) as e:
+        app.resources["thing1"].set_property("unset", "nothing")
+    assert "unknown property name unset" == e.value.message
+
+    # assert exception raised when invalid name passed
+    with pytest.raises(OAATemplateException) as e:
+        app.property_definitions.define_local_user_property("invalide-name!", OAAPropertyType.STRING)
+
+    with pytest.raises(OAATemplateException) as e:
+        app.property_definitions.define_local_user_property("_cantstart", OAAPropertyType.STRING)
+
+    with pytest.raises(OAATemplateException) as e:
+        app.property_definitions.define_local_user_property(123, OAAPropertyType.STRING)
+
+    with pytest.raises(OAATemplateException) as e:
+        app.property_definitions.define_local_group_property("invalide-name!", OAAPropertyType.STRING)
+
+    with pytest.raises(OAATemplateException) as e:
+        app.property_definitions.define_local_role_property("invalide-name!", OAAPropertyType.STRING)
+
+    with pytest.raises(OAATemplateException) as e:
+        app.property_definitions.define_resource_property("thing", "invalide-name!", OAAPropertyType.STRING)
+
+    return
+
 # Test Payloads
 CUSTOM_PROPERTIES_PAYLOAD = """
 {
@@ -398,6 +414,9 @@ CUSTOM_PROPERTIES_PAYLOAD = """
         },
         "local_role_properties": {
           "built_in": "BOOLEAN"
+        },
+        "role_assignment_properties": {
+          "approver": "STRING"
         },
         "resources": [
           {
@@ -489,6 +508,25 @@ CUSTOM_PROPERTIES_PAYLOAD = """
       "resource_types": []
     }
   ],
-  "identity_to_permissions": []
+  "identity_to_permissions": [
+    {
+      "identity": "bob",
+      "identity_type": "local_user",
+      "role_assignments": [
+        {
+          "application": "testapp",
+          "role": "operator",
+          "apply_to_application": false,
+          "resources": [
+            "cog1",
+            "thing1"
+          ],
+          "custom_properties": {
+            "approver": "me"
+          }
+        }
+      ]
+    }
+  ]
 }
 """

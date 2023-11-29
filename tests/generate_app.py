@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Copyright 2022 Veza Technologies Inc.
 
@@ -5,8 +6,14 @@ Use of this source code is governed by the MIT
 license that can be found in the LICENSE file or at
 https://opensource.org/licenses/MIT.
 """
+import logging
+import sys
 
+from oaaclient.client import OAAClient, OAAClientError
 from oaaclient.templates import CustomApplication, Tag, OAAPermission, OAAPropertyType, LocalUserType
+
+logging.basicConfig(format='%(asctime)s %(levelname)s: %(thread)d %(message)s', level=logging.INFO)
+log = logging.getLogger(__name__)
 
 
 def generate_app():
@@ -113,6 +120,9 @@ def generate_app():
     app.property_definitions.define_local_role_property("role_id", OAAPropertyType.NUMBER)
     app.property_definitions.define_local_role_property("custom", OAAPropertyType.BOOLEAN)
 
+    app.property_definitions.define_role_assignment_property("approved", OAAPropertyType.BOOLEAN)
+    app.property_definitions.define_role_assignment_property("approver", OAAPropertyType.STRING)
+
     role1 = app.add_local_role("role1", ["all", "Admin", "Manage_Thing"])
     role1.set_property("role_id", 1)
     role1.set_property("custom", False)
@@ -156,7 +166,7 @@ def generate_app():
 
     # authorizations
     app.local_users["bob"].add_role("role1", apply_to_application=True)
-    app.local_users["sue"].add_role("role3", apply_to_application=True)
+    app.local_users["sue"].add_role("role3", apply_to_application=True, assignment_properties={"approved": True, "approver": "bob"})
     app.local_groups["group2"].add_role("role2", resources=[thing1])
     app.local_users["marry"].add_permission("view", resources=[thing2, cog1])
     app.local_users["rob"].add_permission("manage", resources=[thing1], apply_to_application=True)
@@ -164,6 +174,37 @@ def generate_app():
     app.idp_identities["user01@example.com"].add_role("role1", apply_to_application=True)
 
     return app
+
+def main():
+  log.info("Generate App Main")
+  # assumes VEZA_URL and VEZA_API_KEY are set in env
+  try:
+    con = OAAClient()
+  except (OAAClientError, ValueError) as e:
+     log.error(e)
+     log.error("exiting")
+     sys.exit(1)
+
+  log.info("Connected to tenant")
+  app = generate_app()
+  log.info("App loaded")
+  try:
+     log.info("Pushing")
+     con.push_application(provider_name="Pytest Gen App", data_source_name="generate_app_main", application_object=app, create_provider=True)
+  except OAAClientError as error:
+      log.error(f"{error.error}: {error.message} ({error.status_code})")
+      if hasattr(error, "details"):
+          for detail in error.details:
+              log.error(f"  {detail}")
+
+  log.info("Complete")
+
+  return
+
+
+if __name__ == "__main__":
+  log = logging.getLogger()
+  main()
 
 
 # Full App payload as string
@@ -189,6 +230,10 @@ GENERATED_APP_PAYLOAD = """
         "local_role_properties": {
           "role_id": "NUMBER",
           "custom": "BOOLEAN"
+        },
+        "role_assignment_properties": {
+          "approved": "BOOLEAN",
+          "approver": "STRING"
         },
         "resources": [
           {
@@ -375,7 +420,9 @@ GENERATED_APP_PAYLOAD = """
             "manage",
             "Unknown Permission"
           ],
-          "roles": ["role2"],
+          "roles": [
+            "role2"
+          ],
           "tags": [],
           "custom_properties": {
             "role_id": 3
@@ -501,7 +548,9 @@ GENERATED_APP_PAYLOAD = """
         "DataWrite"
       ],
       "apply_to_sub_resources": false,
-      "resource_types": ["thing"]
+      "resource_types": [
+        "thing"
+      ]
     },
     {
       "name": "Unknown Permission",
@@ -520,8 +569,7 @@ GENERATED_APP_PAYLOAD = """
         {
           "application": "pytest generated app",
           "role": "role1",
-          "apply_to_application": true,
-          "resources": []
+          "apply_to_application": true
         }
       ]
     },
@@ -547,7 +595,10 @@ GENERATED_APP_PAYLOAD = """
           "application": "pytest generated app",
           "role": "role3",
           "apply_to_application": true,
-          "resources": []
+          "custom_properties": {
+            "approved": true,
+            "approver": "bob"
+          }
         }
       ]
     },
@@ -590,8 +641,7 @@ GENERATED_APP_PAYLOAD = """
         {
           "application": "pytest generated app",
           "role": "role1",
-          "apply_to_application": true,
-          "resources": []
+          "apply_to_application": true
         }
       ]
     }

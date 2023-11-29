@@ -83,6 +83,13 @@ def encode_icon_file(icon_path: str) -> str:
 
     return b64_icon.decode()
 
+def exists_in_query_array(value_to_find, input_array) -> bool:
+    for query in input_array:
+        if query["name"] == value_to_find:
+            return True
+
+    return False
+
 
 def build_report(veza_con, report_definition: dict) -> dict:
     """Creates or updates a Veza report from a dictionary
@@ -115,6 +122,8 @@ def build_report(veza_con, report_definition: dict) -> dict:
     if not report_definition.get("queries"):
         raise ValueError("Report source file must contain 'queries' list")
 
+    report_queries = report_definition.get("queries", [])
+
     # get all quires to know which queries need to be created and which don't
     all_queries = veza_con.get_queries()
     query_names = {}
@@ -125,14 +134,17 @@ def build_report(veza_con, report_definition: dict) -> dict:
 
     # create queries that don't already exists
     query_ids = []
+    query_in_report_name = []
     for query in report_definition.get("queries", []):
         if query["name"] in query_names:
             log.debug(f"Found existing query with same name, using for report, {query['name']}")
             query_ids.append(query_names[query["name"]])
+            query_in_report_name.append(query["name"])
         else:
             log.debug(f"Creating query {query['name']}")
             response = veza_con.create_query(query=query)
             query_ids.append(response["id"])
+            query_in_report_name.append(query["name"])
 
     # get all reports to know if report already exists
     existing_reports = {}
@@ -153,8 +165,16 @@ def build_report(veza_con, report_definition: dict) -> dict:
         # update existing report
         report_id = existing_reports[report_name]
         log.debug(f"Updating report {report_id}")
-        for query_id in query_ids:
-            response = veza_con.add_query_report(report_id=report_id, query_id=query_id)
+        # Loop over query ID's
+        for query_name in query_in_report_name:
+            # if report exists, only add new queries
+            if exists_in_query_array(query_name, report_queries):
+                continue
+            response = veza_con.add_query_report(report_id=report_id, query_id=query_names[query_name])
+
+    # if the report is the exact same, it existed before so get report
+    if response == {}:
+        return veza_con.get_report_by_id(id=existing_reports[report_name])
 
     return response
 
