@@ -913,3 +913,22 @@ def test_create_report(veza_con):
         veza_con.get_report_by_id(created_id)
 
     veza_con.delete_query(query_id)
+
+
+@patch.object(requests.Session, "request")
+def test_provider_extra_args(mock_session):
+    # Test that the correct OAAClient exception is raised on properly populated
+
+    test_api_key = "1234"
+    # patch _test_connection to instantiate a connection object
+    with patch.object(OAAClient, "_test_connection", return_value=None):
+        veza_con = OAAClient(url="https://noreply.vezacloud.com", token=test_api_key)
+
+    provider = veza_con.create_provider(name="TestExtra", custom_template="application", options={"extra_bool": True, "extra_string": "test_str"})
+
+    assert provider
+
+    print(mock_session)
+    mock_session.assert_called()
+    call0 = mock_session.mock_calls[0]
+    assert call0.kwargs["json"] == {'name': 'TestExtra', 'custom_template': 'application', 'extra_bool': True, 'extra_string': 'test_str'}

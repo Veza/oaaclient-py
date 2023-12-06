@@ -11,7 +11,7 @@ import logging
 import sys
 
 from oaaclient.client import OAAClient, OAAClientError
-from oaaclient.templates import HRISProvider, OAAPropertyType
+from oaaclient.templates import HRISProvider, OAAPropertyType, IdPProviderType
 
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(thread)d %(message)s', level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -21,6 +21,8 @@ def generate_hris() -> HRISProvider:
     """ Generates a complete HRIS provider """
 
     hris = HRISProvider("Pytest HRIS", hris_type="PyHRIS", url="example.com")
+    hris.system.add_idp_type(IdPProviderType.OKTA)
+    hris.system.add_idp_type(IdPProviderType.AZURE_AD)
 
     hris.property_definitions.define_employee_property("nickname", OAAPropertyType.STRING)
     hris.property_definitions.define_employee_property("has_keys", OAAPropertyType.BOOLEAN)
@@ -130,7 +132,8 @@ GENERATED_HRIS_PAYLOAD = """
   "system": {
     "id": "Pytest HRIS",
     "name": "Pytest HRIS",
-    "url": "example.com"
+    "url": "example.com",
+    "idp_providers": ["okta", "azure_ad"]
   },
   "employees": [
     {

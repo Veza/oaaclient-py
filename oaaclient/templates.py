@@ -2320,6 +2320,7 @@ class HRISSystem():
         self.name = name
         self.unique_id = name
         self.url = url
+        self.idp_providers = []
 
 
     def __str__(self) -> str:
@@ -2331,11 +2332,34 @@ class HRISSystem():
     def to_dict(self) -> dict:
         payload = {"id": self.unique_id,
                    "name": self.name,
-                   "url": self.url
+                   "url": self.url,
+                   "idp_providers": self.idp_providers
                   }
 
         return payload
 
+    def add_idp_type(self, provider_type: IdPProviderType) -> list[IdPProviderType]:
+        """Link HRIS to External IdP of given type
+
+        Sets the IdP types (Okta, AzureAD, ect) for Veza to link employee identities too.
+
+        Args:
+            provider_type (IdPProviderType): Type of IdP for source identities
+
+        Raises:
+            ValueError: provider_type must be IdPProviderType enum
+
+        Returns:
+            list[IdPProviderType]: List of configured IdP types
+        """
+
+        if not isinstance(provider_type, IdPProviderType):
+            raise ValueError(f"provider_type must be of type IdPProviderType enum, received {type(provider_type)}")
+
+        if provider_type not in self.idp_providers:
+            self.idp_providers.append(provider_type)
+
+        return self.idp_providers
 
 class HRISEmployee():
     """HRIS Employee Entity

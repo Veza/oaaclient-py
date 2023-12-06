@@ -225,7 +225,7 @@ class OAAClient():
 
         return response
 
-    def create_provider(self, name: str, custom_template: str, base64_icon: str = None) -> dict:
+    def create_provider(self, name: str, custom_template: str, base64_icon: str = "", options: dict|None = None) -> dict:
         """Create a new Provider.
 
         Creates a new Provider with the given name. An error will be raised for naming conflicts.
@@ -233,7 +233,8 @@ class OAAClient():
         Args:
             name (str): new Provider name
             custom_template (str): the OAA template to use for the Provider ("application" or "identity_provider")
-            base64_icon (str, optional): Base64 encoded string of icon to set for Provider. Defaults to None.
+            base64_icon (str, optional): Base64 encoded string of icon to set for Provider. Defaults to "".
+            options: (dict, optional): Additional arguments to be included with provider create call to Veza. Defaults to None.
 
         Raises:
             ValueError: Provider name contains invalid characters
@@ -245,7 +246,15 @@ class OAAClient():
         if not re.match(self.ALLOWED_CHARACTERS, name):
             raise ValueError(f"Provider name contains invalid characters, must match {self.ALLOWED_CHARACTERS}")
 
-        provider = self.api_post("/api/v1/providers/custom", {"name": name, "custom_template": custom_template})
+        data = {"name": name, "custom_template": custom_template}
+
+        if options and isinstance(options, dict):
+            log.debug(f"Provider create called with extra args: {options}")
+            data.update(options)
+        elif options and not isinstance(options, dict):
+            raise ValueError("extra_args parameter must be dictionary")
+
+        provider = self.api_post("/api/v1/providers/custom", data=data)
         if base64_icon:
             self.update_provider_icon(provider['id'], base64_icon)
 

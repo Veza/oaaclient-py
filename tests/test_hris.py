@@ -64,6 +64,9 @@ def test_hris_exceptions():
 
     assert e.value.message == "Lower-cased property name must match the pattern: '^[a-z][a-z_]*$'. Invalid name: @property"
 
+    with pytest.raises(ValueError, match=r"provider_type must be of type IdPProviderType enum, received <class 'str'>") as e:
+        hris.system.add_idp_type("okta")
+
 
 # Test for empty input validation on user creation
 @pytest.mark.parametrize("details",

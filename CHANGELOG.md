@@ -1,10 +1,18 @@
 # OAA Client Change Log
 
+## v1.1.8
+* Support for setting linked IdP types for HRIS submissions. Veza will automatically link employees to IdP users of the given type(s) when set. Set using `HRISSystem.add_idp_type()` and `IdPProviderType` enums.
+  ```
+  hris = HRISProvider("HRIS", hris_type="MyHRIS", url="example.com")
+  hris.system.add_idp_type(IdPProviderType.OKTA)
+  ```
+* Added ability to pass additional arguments during Provider Creation API Call. Additional arguments can be passed as a dictionary to `Client.create_provider` using optional `options` parameter. Arguments will be passed to Veza during provider create API call and must be supported by Veza or an API error will be returned.
+
 ## v1.1.7
 * Added support for creating OAA Provider as part of `OAAClient.push_application` by passing `create_provider=True` parameter. Will automatically create a new Provider with the `provider_name` if it does not exist
 * Role Assignments now support setting custom properties. These properties must be defined using the `ApplicationPropertyDefinitions.define_role_assignment_property()` method. Properties can be set when adding a role to an identity with the `add_role` method.
 * Changes to `utils.build_report` function to resolve issues from duplicate queries when updating existing reports.
-* Preview - Support for HRIS template with `templates.HRISProvider`. Preview release and interfaces may change before final version. 
+* Preview - Support for HRIS template with `templates.HRISProvider`. Preview release and interfaces may change before final version.
 
 ## v1.1.6
 * Tagging support for CustomIdP entities. IdP Users, Groups and Domains now support `.add_tag(key: str, value: str = "")` method to set the tag key and optional value.
