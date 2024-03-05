@@ -674,6 +674,28 @@ def test_api_paging_get(mock_request):
     assert "page_size" in call_3.kwargs.get("params")
 
 @patch.object(requests.Session, "request")
+def test_api_paging_get_value(mock_request):
+
+    test_api_key = "1234"
+    url = "https://noreply.vezacloud.com"
+
+    with patch.object(OAAClient, "_test_connection", return_value=None):
+        veza_con = OAAClient(url=url, token=test_api_key)
+
+    mock_response = Response()
+    mock_response.status_code = 200
+    mock_response._content = b"""{"value": {"id": "thing"}, "has_more": false}"""
+    mock_response.url = url
+
+    mock_request.side_effect = [mock_response]
+
+    thing = veza_con.api_get("/mock/call")
+    assert mock_request.call_count == 1
+
+    assert thing == {"id": "thing"}
+    return
+
+@patch.object(requests.Session, "request")
 def test_api_paging_post(mock_request):
 
     test_api_key = "1234"
@@ -716,6 +738,74 @@ def test_api_paging_post(mock_request):
 
     call_3 = mock_request.call_args_list[2]
     assert "page_token=page3" in call_3.kwargs.get("params")
+
+@patch.object(requests.Session, "request")
+def test_api_paging_post_path_values(mock_request):
+
+    # test for paging when the API is returning `path_values`
+
+    test_api_key = "1234"
+    url = "https://noreply.vezacloud.com"
+
+    with patch.object(OAAClient, "_test_connection", return_value=None):
+        veza_con = OAAClient(url=url, token=test_api_key)
+
+    # build some fake pages
+    page_1 = b"""{"values": [], "path_values": ["1", "2", "3"], "has_more": true, "next_page_token": "page2"}"""
+    page_2 = b"""{"values": [], "path_values": ["4", "5", "6"], "has_more": true, "next_page_token": "page3"}"""
+    page_3 = b"""{"values": [], "path_values": ["7", "8"], "has_more": false}"""
+
+    responses = []
+
+    for page in [page_1, page_2, page_3]:
+        mock_response = Response()
+        mock_response.status_code = 200
+        mock_response._content = page
+        mock_response.url = url
+
+        responses.append(mock_response)
+
+    mock_request.side_effect = responses
+
+    result = veza_con.api_post("/fake/url", data={})
+
+    assert result == ["1", "2", "3", "4", "5", "6", "7", "8"]
+
+    # assert that it made three request calls to get through all the pages
+    assert mock_request.call_count == 3
+
+    # check that the page_token params is set correctly on each of the three expected API calls
+    # first call should have no page size
+    call_1 = mock_request.call_args_list[0]
+    assert call_1.kwargs.get("params") is None
+
+    call_2 = mock_request.call_args_list[1]
+    assert "page_token=page2" in call_2.kwargs.get("params")
+
+    call_3 = mock_request.call_args_list[2]
+    assert "page_token=page3" in call_3.kwargs.get("params")
+
+@patch.object(requests.Session, "request")
+def test_api_paging_post_value(mock_request):
+
+    test_api_key = "1234"
+    url = "https://noreply.vezacloud.com"
+
+    with patch.object(OAAClient, "_test_connection", return_value=None):
+        veza_con = OAAClient(url=url, token=test_api_key)
+
+    mock_response = Response()
+    mock_response.status_code = 200
+    mock_response._content = b"""{"value": {"id": "thing"}, "has_more": false}"""
+    mock_response.url = url
+
+    mock_request.side_effect = [mock_response]
+
+    thing = veza_con.api_post("/mock/call", data={})
+    assert mock_request.call_count == 1
+
+    assert thing == {"id": "thing"}
+    return
 
 @patch.object(requests.Session, "request")
 def test_api_paging_put(mock_request):
@@ -917,8 +1007,6 @@ def test_create_report(veza_con):
 
 @patch.object(requests.Session, "request")
 def test_provider_extra_args(mock_session):
-    # Test that the correct OAAClient exception is raised on properly populated
-
     test_api_key = "1234"
     # patch _test_connection to instantiate a connection object
     with patch.object(OAAClient, "_test_connection", return_value=None):
@@ -932,3 +1020,40 @@ def test_provider_extra_args(mock_session):
     mock_session.assert_called()
     call0 = mock_session.mock_calls[0]
     assert call0.kwargs["json"] == {'name': 'TestExtra', 'custom_template': 'application', 'extra_bool': True, 'extra_string': 'test_str'}
+
+
+@patch.object(requests.Session, "request")
+@patch.object(OAAClient, "get_provider", return_value={"id": "123"})
+@patch.object(OAAClient, "get_data_source", return_value={"id": "456"})
+def test_push_extra_options(mock_get_data_source, mock_get_provider, mock_request):
+    test_api_key = "1234"
+    # patch _test_connection to instantiate a connection object
+    with patch.object(OAAClient, "_test_connection", return_value=None):
+        veza_con = OAAClient(url="https://noreply.vezacloud.com", token=test_api_key)
+
+    mock_response = Response()
+    mock_response.status_code = 200
+    mock_response._content = b"""{"id": "987"}"""
+    mock_response.url = "https://pytest.veza.com"
+
+    app = generate_app()
+    response = veza_con.push_application(provider_name="provider", data_source_name="data source", application_object=app, options={"extra": "pytest", "something": "value"})
+
+    assert mock_request.called
+
+    call = mock_request.call_args
+    call_json = call.kwargs.get("json")
+    assert call_json
+
+    # validate the extra values are in he payload
+    assert "extra" in call_json
+    assert call_json["extra"] == "pytest"
+    assert "something" in call_json
+    assert call_json["something"] == "value"
+
+    # validate other expected payload values are present/accurate
+    assert "json_data" in call_json
+    assert call_json["id"] == "123"
+    assert call_json["data_source_id"] == "456"
+
+    return

@@ -1,5 +1,13 @@
 # OAA Client Change Log
 
+## v1.1.9
+* Added ability to pass additional argument using `options` dictionary parameter to more methods in the `OAAClient`. Arguments will be passed to Veza during provider create API call and must be supported by Veza or an API error will be returned.
+  * `OAAClient.push_application`
+  * `OAAClient.push_medatadata`
+  * `OAAClient.create_data_source`
+* Support for automatic paging of Veza API calls that return `path_values` lists such as the query spec API
+
+
 ## v1.1.8
 * Support for setting linked IdP types for HRIS submissions. Veza will automatically link employees to IdP users of the given type(s) when set. Set using `HRISSystem.add_idp_type()` and `IdPProviderType` enums.
   ```

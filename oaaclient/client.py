@@ -200,6 +200,7 @@ class OAAClient():
             provider = response[0]
         else:
             # this shouldn't happen
+            print(response)
             raise OAAClientError(error="Unexpected Results", message = "Unexpected results in response, returned more than one result")
 
         # return the provider detail
@@ -249,10 +250,10 @@ class OAAClient():
         data = {"name": name, "custom_template": custom_template}
 
         if options and isinstance(options, dict):
-            log.debug(f"Provider create called with extra args: {options}")
+            log.debug(f"Provider create called with options args: {options}")
             data.update(options)
         elif options and not isinstance(options, dict):
-            raise ValueError("extra_args parameter must be dictionary")
+            raise ValueError("options parameter must be dictionary")
 
         provider = self.api_post("/api/v1/providers/custom", data=data)
         if base64_icon:
@@ -343,12 +344,13 @@ class OAAClient():
 
         return data_source
 
-    def create_data_source(self, name: str, provider_id: str) -> dict:
+    def create_data_source(self, name: str, provider_id: str, options: dict|None = None) -> dict:
         """Create a new Data Source for the given Provider ID.
 
         Args:
             name (str): Name for new Data Source
             provider_id (str): Unique identifier for the Provider
+            options: (dict, optional): Additional arguments to be included with data source create call to Veza. Defaults to None.
 
         Raises:
             ValueError: Data source name contains invalid characters
@@ -361,6 +363,13 @@ class OAAClient():
             raise ValueError(f"Data source name contains invalid characters, must match {self.ALLOWED_CHARACTERS}")
 
         data_source = {"name": name, "id": provider_id}
+
+        if options and isinstance(options, dict):
+            log.debug(f"Provider create called with extra args: {options}")
+            data_source.update(options)
+        elif options and not isinstance(options, dict):
+            raise ValueError("extra_args parameter must be dictionary")
+
         return self.api_post(f"/api/v1/providers/custom/{provider_id}/datasources", data=data_source)
 
     def create_datasource(self, name, provider_id):
@@ -384,7 +393,7 @@ class OAAClient():
         response = self.api_delete(f"/api/v1/providers/custom/{provider_id}/datasources/{data_source_id}")
         return response
 
-    def push_metadata(self, provider_name: str, data_source_name: str, metadata: dict, save_json: bool = False) -> dict:
+    def push_metadata(self, provider_name: str, data_source_name: str, metadata: dict, save_json: bool = False, options: dict|None = None) -> dict:
         """Push an OAA payload dictionary to Veza.
 
         Publishes the supplied `metadata` dictionary representing an OAA payload to the specified provider and
@@ -396,6 +405,7 @@ class OAAClient():
             data_source_name (str): Name for Data Source, will be created if doesn't exist.
             metadata (dict): Dictionary of OAA payload to push.
             save_json (bool, optional): Save the OAA JSON payload to a local file before push. Defaults to False.
+            options (dict, optional): Additional dictionary of key/values to be included in push API call. Defaults to None.
 
         Raises:
             OAAClientError: If any API call returns an error including errors processing the OAA payload.
@@ -433,6 +443,12 @@ class OAAClient():
         else:
             payload = {"id": provider["id"], "data_source_id": data_source["id"], "json_data": json.dumps(metadata)}
 
+        if options and isinstance(options, dict):
+            log.debug(f"Provider create called with additional options: {options}")
+            payload.update(options)
+        elif options and not isinstance(options, dict):
+            raise ValueError("options parameter must be dictionary")
+
         payload_size = sys.getsizeof(payload["json_data"])
         if payload_size > 100_000_000:
             raise OAAClientError("OVERSIZE", message=f"Payload size exceeds maximum size of 100MB: {payload_size:,} bytes, compression enabled: {self.enable_compression}")
@@ -442,7 +458,14 @@ class OAAClient():
 
         return result
 
-    def push_application(self, provider_name: str, data_source_name: str, application_object: CustomApplication|CustomIdPProvider, save_json: bool = False, create_provider: bool = False) -> dict:
+    def push_application(self,
+                         provider_name: str,
+                         data_source_name: str,
+                         application_object: CustomApplication|CustomIdPProvider,
+                         save_json: bool = False,
+                         create_provider: bool = False,
+                         options: dict|None = None
+                         ) -> dict:
         """Push an OAA Application Object (such as CustomApplication).
 
         Extracts the OAA JSON payload from the supplied OAA class (e.g. CustomApplication, CustomIdPProvider, etc) and push to
@@ -460,6 +483,7 @@ class OAAClient():
             application_object (Class): OAA object to extract the payload from
             save_json (bool, optional): Save the JSON payload to a local file before push. Defaults to False.
             create_provider (bool, optional): Create a new Provider if Provider does not already exists. Defaults to False.
+            options (dict, optional): Additional dictionary of key/values to be included in push API call. Defaults to None.
 
         Raises:
             OAAClientError: If any API call returns an error (including errors processing the OAA payload).
@@ -478,7 +502,7 @@ class OAAClient():
 
         metadata = application_object.get_payload()
 
-        return self.push_metadata(provider_name, data_source_name, metadata, save_json=save_json)
+        return self.push_metadata(provider_name=provider_name, data_source_name=data_source_name, metadata=metadata, save_json=save_json, options=options)
 
     def get_queries(self, include_inactive_queries:bool = True) -> list[dict]:
         """Get all saved Assessment Queries
@@ -708,10 +732,14 @@ class OAAClient():
         while True:
             response = self._perform_request(method="POST", api_path=api_path, data=data, params=params)
 
+            values_key = "values"
+            # Some API end-points use a different response key for multi-value response, need to check if present for paging
+            if "path_values" in response and len(response["path_values"]) > 0:
+                values_key = "path_values"
 
-            if "values" in response:
+            if values_key in response:
                 # paginated response,
-                result.extend(response.get("values", []))
+                result.extend(response.get(values_key, []))
                 if response.get("has_more"):
                     params["page_token"] = response.get("next_page_token")
                 else:
