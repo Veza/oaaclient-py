@@ -74,6 +74,7 @@ def generate_app():
         user = app.add_local_user(username)
         user.add_identity(f"{username}@example.com")
         # set all the properties to something
+        user.email = f"{username}@example.com"
         user.is_active = True
         user.created_at = "2001-01-01T00:00:00.000Z"
         user.last_login_at = "2002-02-01T00:00:00.000Z"
@@ -258,6 +259,7 @@ GENERATED_APP_PAYLOAD = """
       "local_users": [
         {
           "name": "bob",
+          "email": "bob@example.com",
           "identities": [
             "bob@example.com"
           ],
@@ -285,6 +287,7 @@ GENERATED_APP_PAYLOAD = """
         },
         {
           "name": "marry",
+          "email": "marry@example.com",
           "identities": [
             "marry@example.com"
           ],
@@ -313,6 +316,7 @@ GENERATED_APP_PAYLOAD = """
         },
         {
           "name": "sue",
+          "email": "sue@example.com",
           "identities": [
             "sue@example.com"
           ],
@@ -336,6 +340,7 @@ GENERATED_APP_PAYLOAD = """
         },
         {
           "name": "rob",
+          "email": "rob@example.com",
           "identities": [
             "rob@example.com"
           ],
@@ -436,6 +441,7 @@ GENERATED_APP_PAYLOAD = """
           "custom_properties": {}
         }
       ],
+      "local_access_creds": [],
       "tags": [],
       "custom_properties": {
         "version": "2022.2.2"

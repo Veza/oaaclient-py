@@ -1,5 +1,20 @@
 # OAA Client Change Log
 
+## v1.1.10
+* Added support for Access Credentials entity type. Access Credentials can be used to represent non-user based access such as API keys or Application Integrations that have their own roles and permissions in the application. Access Credentials can be stand-alone or assigned to a local user.
+  ```python
+  access_cred_1 = app.add_access_cred("cred001", "Access Cred 001")
+  access_cred_1.is_active = True
+  access_cred_1.last_used_at = "2024-03-12T00:00:00.000Z"
+  access_cred_1.add_role("some_role_id", apply_to_application=True)
+  app.local_users["user001"].add_access_cred("cred001")
+  ```
+* Adds support for built in `email` property for Application Local Users. The `email` property can be set on a Local User after creating it.
+  ```
+  user = my_app.add_local_user(unique_id="123", name="My User")
+  user.email = "my_email@example.com"
+  ```
+
 ## v1.1.9
 * Added ability to pass additional argument using `options` dictionary parameter to more methods in the `OAAClient`. Arguments will be passed to Veza during provider create API call and must be supported by Veza or an API error will be returned.
   * `OAAClient.push_application`

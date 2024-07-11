@@ -144,6 +144,35 @@ def generate_app_id_mapping():
     app.local_users[1236].add_permission("view", resources=[thing2, cog1])
     app.local_users[1237].add_permission("manage", resources=[thing1], apply_to_application=True)
 
+
+    app.property_definitions.define_access_cred_property("is_oauth", OAAPropertyType.BOOLEAN)
+    app.property_definitions.define_access_cred_property("generation", OAAPropertyType.STRING)
+
+    access_cred_1 = app.add_access_cred("cred001", "Access Cred 001")
+    access_cred_1.is_active = True
+    access_cred_1.can_expire = True
+    access_cred_1.last_used_at = "2024-03-12T00:00:00.000Z"
+    access_cred_1.created_at = "2023-01-03T00:00:00.000Z"
+    access_cred_1.expires_at = "2040-04-15T00:00:00.000Z"
+    access_cred_1.set_property("is_oauth", False)
+    access_cred_1.set_property("generation", "v2")
+    access_cred_1.add_role("r1", apply_to_application=True)
+
+    access_cred_2 = app.add_access_cred("cred002", "Access Cred 002")
+    access_cred_2.is_active = False
+    access_cred_2.can_expire = True
+    access_cred_2.last_used_at = "2024-03-12T00:00:00.000Z"
+    access_cred_2.created_at = "2023-01-03T00:00:00.000Z"
+    access_cred_2.expires_at = "2040-04-15T00:00:00.000Z"
+    access_cred_2.set_property("is_oauth", True)
+    access_cred_2.set_property("generation", "v3")
+    access_cred_2.add_role("r2", resources=[cog1])
+
+    app.local_users[1234].add_access_cred("cred002")
+
+    access_cred_3 = app.add_access_cred("cred003", "Access Cred 003")
+    access_cred_3.add_permission("Admin", apply_to_application=True)
+
     return app
 
 def main():
@@ -199,6 +228,10 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
           "role_id": "NUMBER",
           "custom": "BOOLEAN"
         },
+        "local_access_creds_properties": {
+          "is_oauth": "BOOLEAN",
+          "generation": "STRING"
+        },
         "resources": [
           {
             "resource_type": "thing",
@@ -227,6 +260,9 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
           ],
           "groups": [
             "g1"
+          ],
+          "access_creds": [
+            "cred002"
           ],
           "is_active": true,
           "created_at": "2001-01-01T00:00:00.000Z",
@@ -350,6 +386,39 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
             "role_id": 1
           },
           "id": "r2"
+        }
+      ],
+      "local_access_creds": [
+        {
+          "id": "cred001",
+          "name": "Access Cred 001",
+          "is_active": true,
+          "created_at": "2023-01-03T00:00:00.000Z",
+          "expires_at": "2040-04-15T00:00:00.000Z",
+          "last_used_at": "2024-03-12T00:00:00.000Z",
+          "can_expire": true,
+          "custom_properties": {
+            "is_oauth": false,
+            "generation": "v2"
+          }
+        },
+        {
+          "id": "cred002",
+          "name": "Access Cred 002",
+          "is_active": false,
+          "created_at": "2023-01-03T00:00:00.000Z",
+          "expires_at": "2040-04-15T00:00:00.000Z",
+          "last_used_at": "2024-03-12T00:00:00.000Z",
+          "can_expire": true,
+          "custom_properties": {
+            "is_oauth": true,
+            "generation": "v3"
+          }
+        },
+        {
+          "id": "cred003",
+          "name": "Access Cred 003",
+          "is_active": true
         }
       ],
       "tags": [],
@@ -510,6 +579,42 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
           "resources": [
             "t1"
           ]
+        }
+      ]
+    },
+    {
+      "identity": "cred001",
+      "identity_type": "local_access_creds",
+      "role_assignments": [
+        {
+          "application": "pytest unique id app",
+          "role": "r1",
+          "apply_to_application": true
+        }
+      ]
+    },
+    {
+      "identity": "cred002",
+      "identity_type": "local_access_creds",
+      "role_assignments": [
+        {
+          "application": "pytest unique id app",
+          "role": "r2",
+          "apply_to_application": false,
+          "resources": [
+            "t2.c1"
+          ]
+        }
+      ]
+    },
+    {
+      "identity": "cred003",
+      "identity_type": "local_access_creds",
+      "application_permissions": [
+        {
+          "application": "pytest unique id app",
+          "permission": "Admin",
+          "apply_to_application": true
         }
       ]
     }

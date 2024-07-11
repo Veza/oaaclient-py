@@ -57,6 +57,7 @@ class OAAIdentityType(str, Enum):
     LocalGroup = "local_group"
     LocalRole = "local_role"
     IdP = "idp"
+    AccessCred = "local_access_creds"
 
     def __repr__(self) -> str:
         return f'{self.__class__.__name__}.{self.name}'
@@ -120,6 +121,7 @@ class CustomApplication(Application):
         self.local_groups = CaseInsensitiveDict()
         self.local_roles = CaseInsensitiveDict()
         self.idp_identities = CaseInsensitiveDict()
+        self.access_creds = CaseInsensitiveDict()
         self.resources = CaseInsensitiveDict()
         self.tags = []
         self.property_definitions = ApplicationPropertyDefinitions(application_type)
@@ -161,6 +163,7 @@ class CustomApplication(Application):
                 "local_users": [user.to_dict() for user in self.local_users.values()],
                 "local_groups": [group.to_dict() for group in self.local_groups.values()],
                 "local_roles": [role.to_dict() for role in self.local_roles.values()],
+                "local_access_creds": [cred.to_dict() for cred in self.access_creds.values()],
                 "tags": [tag.__dict__ for tag in self.tags],
                 "custom_properties": self.properties
                 }
@@ -376,6 +379,31 @@ class CustomApplication(Application):
 
         return self.idp_identities[name]
 
+    def add_access_cred(self, unique_id: str, name: str) -> AccessCred:
+        """Create an Access Credential
+
+        Access creds can be used to represent alternative access methods such as API keys or application integrations. 
+
+        Access creds can be assigned roles and permissions similar to local users. Access credentials can exist independently for use cases
+        such as administratively created integrations or can be assigned to a local user for use cases like personal access tokens. 
+
+        Args:
+            unique_id (str): unique identifier for access cred
+            name (str): name for access cred
+
+        Raises:
+            OAATemplateException: Access credential with unique ID already exists
+
+        Returns:
+            AccessCred: New access cred
+        """
+
+        if unique_id in self.access_creds:
+            raise OAATemplateException(f"Access credential identified by {unique_id} already exists")
+        self.access_creds[unique_id] = AccessCred(unique_id=unique_id, name=name, property_definitions=self.property_definitions)
+
+        return self.access_creds[unique_id]
+
     def add_tag(self, key: str, value: str = "") -> None:
         """ Add a tag to the Application
 
@@ -464,6 +492,7 @@ class CustomApplication(Application):
         identities.extend(self.local_users.values())
         identities.extend(self.local_groups.values())
         identities.extend(self.idp_identities.values())
+        identities.extend(self.access_creds.values())
         for identity in identities:
             entry = identity.get_identity_to_permissions(application_name=self.name)
             if "application_permissions" in entry or "role_assignments" in entry:
@@ -881,6 +910,7 @@ class LocalUser(Identity):
     Attributes:
         name (str): name of identity
         id (str): ID of entity for ID based reference
+        email (string): Users email address
         identities (list): list of strings for IdP identity association
         groups (list[LocalGroup]): list of group names as strings to add user too
         identity_type (OAAIdentityType): Veza Identity Type (local_user)
@@ -903,6 +933,8 @@ class LocalUser(Identity):
         self.identities = append_helper(None, identities)
         self.groups = append_helper(None, groups)
 
+        self.access_creds = []
+
         # properties available for local users
         self.is_active = None
         self.created_at = None
@@ -910,6 +942,7 @@ class LocalUser(Identity):
         self.deactivated_at = None
         self.password_last_changed_at = None
         self.user_type = None
+        self.email = None
 
     def __str__(self) -> str:
         return f"Local User - {self.name} ({self.unique_id})"
@@ -962,13 +995,29 @@ class LocalUser(Identity):
             self.groups = append_helper(self.groups, group)
 
         return
+    
+    def add_access_cred(self, access_cred: str) -> None:
+        """Add access cred to user (access cred must be created separately)
+
+        Args:
+            access_cred (str): unique identifier of access cred
+        """
+
+        access_cred = str(access_cred)
+        if access_cred in self.access_creds:
+            return
+        
+        self.access_creds.append(access_cred)
+        return
 
     def to_dict(self) -> dict:
         """ Output user to dictionary for payload. """
 
         user = {"name": self.name,
+                "email": self.email,
                 "identities": self.identities,
                 "groups": self.groups,
+                "access_creds": self.access_creds,
                 "is_active": self.is_active,
                 "created_at": self.created_at,
                 "last_login_at": self.last_login_at,
@@ -1095,6 +1144,92 @@ class IdPIdentity(Identity):
         IdP identities do not support custom properties since the identity is discovered through the provider (Okta, Azure, etc)
         """
         raise OAATemplateException("IdP identities do not support custom properties")
+
+class AccessCred(Identity):
+    """Access Credential derived from Identity base class.
+
+    Access Creds can be used to represent non-user based methods that grant access such as API keys or integrations. 
+
+    AccessCreds can be assigned roles or permissions to an application or resource. An AccessCred can stand-alone or be associated
+    to a local user. 
+
+    Args:
+        unique_id (str): Unique identifier for access cred
+        name (str): Name for access cred, does not need to be unique
+    
+    Attributes:
+        unique_id (str): Unique identifier for access cred
+        name (str): Name for access cred, does not need to be unique
+        is_active (bool): Indicate if credential is active, defaults to True
+        created_at (str): Time access cred was created at as RFC3339 timestampe, defaults to empty
+        expires_at (str): Time access cred was created at as RFC3339 timestampe, defaults to empty
+        last_used_at (str): Time access cred was created at as RFC3339 timestampe, defaults to empty
+        can_expire (bool): Boolean to indicate if credential type can exipre, defaults to unset
+
+    """
+
+    def __init__(self, unique_id: str, name: str, property_definitions: ApplicationPropertyDefinitions = None) -> None:
+        if not unique_id:
+            raise ValueError("Unique ID cannot be empty")
+        if not name:
+            raise ValueError("Name cannot be empty")
+        
+        super().__init__(name, identity_type=OAAIdentityType.AccessCred, unique_id=unique_id, property_definitions=property_definitions)
+
+        self.is_active = True
+        self.created_at = ""
+        self.expires_at = ""
+        self.last_used_at = ""
+        self.can_expire: bool|None = None
+
+        return
+    
+    def to_dict(self) -> dict: 
+        """ Output Access credential dictionary for payload """
+
+        cred = {"id": self.unique_id,
+                "name": self.name,
+                "is_active": self.is_active,
+                "created_at": self.created_at,
+                "expires_at": self.expires_at,
+                "last_used_at": self.last_used_at,
+                "can_expire": self.can_expire,
+                "tags": [tag.__dict__ for tag in self.tags],
+                "custom_properties": self.properties
+                }
+
+        return {k: v for k, v in cred.items() if v not in [None, [], {}, ""]}
+    
+    def set_property(self, property_name: str, property_value: any, ignore_none: bool = False) -> None:
+        """ Set a custom defined property to a specific value on an access credential.
+
+        Property name must be defined for access credentials before calling `set_property()`. See example below
+        and `ApplicationPropertyDefinitions.define_access_cred_property` for more information on defining properties.
+
+        Args:
+            property_name (str): Name of property to set value for
+            property_value (Any): Value for property, type should match `OAAPropertyType` for property definition
+            ignore_none (bool, optional): Do not set property if value is None. Defaults to False.
+
+        Raises:
+            OAATemplateException: If property with `property_name` is not defined.
+
+        Example:
+
+            >>> app = CustomApplication("App", application_type="example")
+            >>> app.property_definitions.define_access_cred_property(name="my_property", property_type=OAAPropertyType.STRING)
+            >>> cred1 = app.add_access_cred(unique_id="cred001", name="Cred 001")
+            >>> cred1.set_property("my_property", "value for cred001")
+        """
+
+        if not self.property_definitions:
+            raise OAATemplateException("No custom property definitions found for entity")
+
+        if ignore_none and property_value is None:
+            return
+
+        self.property_definitions.validate_property_name(property_name, entity_type="access_cred")
+        self.properties[property_name] = property_value
 
 
 class LocalRole():
@@ -1360,6 +1495,7 @@ class ApplicationPropertyDefinitions():
         self.local_group_properties = {}
         self.local_role_properties = {}
         self.role_assignment_properties = {}
+        self.access_cred_properties = {}
         self.resource_properties = {}
 
     def __str__(self) -> str:
@@ -1377,6 +1513,7 @@ class ApplicationPropertyDefinitions():
             "local_group_properties": self.local_group_properties,
             "local_role_properties": self.local_role_properties,
             "role_assignment_properties": self.role_assignment_properties,
+            "local_access_creds_properties": self.access_cred_properties,
             "resources": list(self.resource_properties.values())
         }
 
@@ -1444,6 +1581,18 @@ class ApplicationPropertyDefinitions():
         self._validate_types(name, property_type)
         self.role_assignment_properties[name] = property_type
 
+    def define_access_cred_property(self, name: str, property_type: OAAPropertyType) -> None:
+        """ Define an access cred property.
+
+        Args:
+            name (str): name for property
+            property_type (OAAPropertyType): type for property
+
+        """
+        self.validate_name(name)
+        self._validate_types(name, property_type)
+        self.access_cred_properties[name] = property_type
+
     def define_resource_property(self, resource_type: str, name: str, property_type: OAAPropertyType) -> None:
         """ Define a property for a resource by type of resource.
 
@@ -1483,6 +1632,8 @@ class ApplicationPropertyDefinitions():
             valid_property_names = self.local_role_properties.keys()
         elif entity_type == "role_assignment":
             valid_property_names = self.role_assignment_properties.keys()
+        elif entity_type == "access_cred":
+            valid_property_names = self.access_cred_properties.keys()
         elif entity_type == "resource":
             try:
                 valid_property_names = self.resource_properties[resource_type].keys()

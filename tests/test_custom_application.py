@@ -468,6 +468,7 @@ CUSTOM_PROPERTIES_PAYLOAD = """
           }
         }
       ],
+      "local_access_creds": [],
       "tags": [],
       "custom_properties": {
         "contact": "billy",
