@@ -47,6 +47,7 @@ def test_custom_idp():
 
     payload = idp.get_payload()
 
+    print(json.dumps(payload, indent=2))
     expected_result = json.loads(TEST_CUSTOM_IDP_RESULT)
 
     assert payload == expected_result
@@ -111,7 +112,9 @@ TEST_CUSTOM_IDP_RESULT = """
   "custom_property_definition": {
     "domain_properties": {},
     "user_properties": {},
-    "group_properties": {}
+    "group_properties": {},
+    "app_properties": {},
+    "app_assignment_properties": {}
   },
   "name": "test",
   "idp_type": "test_idp",
@@ -125,12 +128,8 @@ TEST_CUSTOM_IDP_RESULT = """
   "users": [
     {
       "name": "user001",
-      "email": null,
       "identity": "user001",
-      "full_name": null,
       "department": "Quality Assurance",
-      "is_active": null,
-      "is_guest": null,
       "manager_id": "user003_identity",
       "groups": [
         {
@@ -144,20 +143,11 @@ TEST_CUSTOM_IDP_RESULT = """
         {
           "identity": "arn:aws:iam::123456789012:role/role002"
         }
-      ],
-      "source_identity": null,
-      "tags": [],
-      "custom_properties": {}
+      ]
     },
     {
       "name": "user002",
-      "email": null,
       "identity": "user002",
-      "full_name": null,
-      "department": null,
-      "is_active": null,
-      "is_guest": null,
-      "manager_id": null,
       "groups": [
         {
           "identity": "group002"
@@ -167,20 +157,12 @@ TEST_CUSTOM_IDP_RESULT = """
         {
           "identity": "arn:aws:iam::123456789012:role/role001"
         }
-      ],
-      "source_identity": null,
-      "tags": [],
-      "custom_properties": {}
+      ]
     },
     {
       "name": "user003",
-      "email": null,
       "identity": "user003_identity",
-      "full_name": null,
-      "department": null,
-      "is_active": null,
       "is_guest": false,
-      "manager_id": null,
       "groups": [
         {
           "identity": "group001"
@@ -188,59 +170,28 @@ TEST_CUSTOM_IDP_RESULT = """
         {
           "identity": "group002"
         }
-      ],
-      "assumed_role_arns": [],
-      "source_identity": null,
-      "tags": [],
-      "custom_properties": {}
+      ]
     },
     {
       "name": "user004",
-      "email": null,
       "identity": "user004",
-      "full_name": null,
-      "department": null,
-      "is_active": null,
-      "is_guest": true,
-      "manager_id": null,
-      "groups": [],
-      "assumed_role_arns": [],
-      "source_identity": null,
-      "tags": [],
-      "custom_properties": {}
+      "is_guest": true
     }
   ],
   "groups": [
     {
       "name": "group001",
-      "identity": "group001",
-      "full_name": null,
-      "is_security_group": null,
-      "assumed_role_arns": [],
-      "groups": [],
-      "tags": [],
-      "custom_properties": {}
+      "identity": "group001"
     },
     {
       "name": "group002",
-      "identity": "group002",
-      "full_name": null,
-      "is_security_group": null,
-      "assumed_role_arns": [],
-      "groups": [],
-      "tags": [],
-      "custom_properties": {}
+      "identity": "group002"
     },
     {
       "name": "group003",
-      "identity": "group003_identity",
-      "full_name": null,
-      "is_security_group": null,
-      "assumed_role_arns": [],
-      "groups": [],
-      "tags": [],
-      "custom_properties": {}
+      "identity": "group003_identity"
     }
-  ]
+  ],
+  "apps": []
 }
 """

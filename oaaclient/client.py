@@ -113,6 +113,9 @@ class OAAClient():
     # Must be passed with params for API call when calling paging APIs `params={"page_size": self.DEFAULT_PAGE_LENGTH}`
     DEFAULT_PAGE_SIZE = 250
 
+    # default number of seconds for API requests before timeout
+    DEFAULT_API_TIMEOUT = 300
+
     def __init__(self, url:str = None, api_key: str = None, username: str = None, token: str = None):
 
         if not url and "VEZA_URL" in os.environ:
@@ -151,6 +154,13 @@ class OAAClient():
 
         # enable payload compression by default, connection object property can be set to False to disable
         self.enable_compression = True
+
+
+        try:
+            self._api_timeout = int(os.getenv("OAA_API_TIMEOUT", self.DEFAULT_API_TIMEOUT))
+        except ValueError:
+            log.error(f"DEFAULT_API_TIMEOUT variable must be integer, ignoring and setting to default {self.DEFAULT_API_TIMEOUT}")
+            self._api_timeout = self.DEFAULT_RETRY_COUNT
 
         # setup retry strategy for API calls
 
@@ -853,7 +863,7 @@ class OAAClient():
         headers = {}
         headers["authorization"] = f"Bearer {self.api_key}"
         headers["user-agent"] = self._user_agent
-        api_timeout = 300
+        api_timeout = self._api_timeout
         api_path = api_path.lstrip("/")
 
         if params:

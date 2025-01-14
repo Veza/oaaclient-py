@@ -77,6 +77,18 @@ def generate_idp():
     idp.groups["g004"].add_groups(["g003"])
     idp.groups["g002"].add_groups(["g003", "g004"])
 
+    # test apps and app assignments
+    idp.property_definitions.define_app_property("saml_login", OAAPropertyType.BOOLEAN)
+    idp.property_definitions.define_app_assignment_property("added_on", OAAPropertyType.TIMESTAMP)
+    app1 = idp.add_app(id="app1", name="Application 01")
+    app1.set_property("saml_login", True)
+
+
+    user0001.add_app_assignment(id="member", name="Member", app_id="app1", assignment_properties={"added_on": "2024-02-16T08:18:23.254Z"})
+    user0002.add_app_assignment(id="admin", name="Admin", app_id="app1", assignment_properties={"added_on": "2023-11-11T13:33:40.288Z"})
+
+    app2 = idp.add_app(id="app2", name="Application 02")
+    group001.add_app_assignment(id="member", name="Memer", app_id="app2")
     return idp
 
 def main():
@@ -126,6 +138,12 @@ GENERATED_IDP_PAYLOAD = """
     },
     "group_properties": {
       "owner": "STRING"
+    },
+    "app_properties": {
+      "saml_login": "BOOLEAN"
+    },
+    "app_assignment_properties": {
+      "added_on": "TIMESTAMP"
     }
   },
   "name": "Pytest IdP",
@@ -173,7 +191,8 @@ GENERATED_IDP_PAYLOAD = """
           "key": "tagnovalue",
           "value": ""
         }
-      ],      "custom_properties": {
+      ],
+      "custom_properties": {
         "contractor": false,
         "parking_spaces": 1,
         "cube_number": "East-224",
@@ -182,7 +201,17 @@ GENERATED_IDP_PAYLOAD = """
           "One Dude"
         ],
         "birthday": "2001-01-01T01:01:01.001Z"
-      }
+      },
+      "app_assignments": [
+        {
+          "id": "member",
+          "name": "Member",
+          "app_id": "app1",
+          "custom_properties": {
+            "added_on": "2024-02-16T08:18:23.254Z"
+          }
+        }
+      ]
     },
     {
       "name": "user0002",
@@ -192,7 +221,6 @@ GENERATED_IDP_PAYLOAD = """
       "department": "Sales",
       "is_active": false,
       "is_guest": true,
-      "manager_id": null,
       "groups": [
         {
           "identity": "g001"
@@ -201,7 +229,6 @@ GENERATED_IDP_PAYLOAD = """
           "identity": "g002"
         }
       ],
-      "assumed_role_arns": [],
       "source_identity": {
         "identity": "user0002@corp.example.com",
         "provider_type": "azure_ad"
@@ -211,17 +238,23 @@ GENERATED_IDP_PAYLOAD = """
           "key": "tagwithvalue",
           "value": "somevalue"
         }
-      ],      "custom_properties": {}
+      ],
+      "app_assignments": [
+        {
+          "id": "admin",
+          "name": "Admin",
+          "app_id": "app1",
+          "custom_properties": {
+            "added_on": "2023-11-11T13:33:40.288Z"
+          }
+        }
+      ]
     },
     {
       "name": "user0003",
       "email": "user003@example.com",
       "identity": "0003",
       "full_name": "User 0003",
-      "department": null,
-      "is_active": null,
-      "is_guest": null,
-      "manager_id": null,
       "groups": [
         {
           "identity": "g002"
@@ -229,64 +262,35 @@ GENERATED_IDP_PAYLOAD = """
         {
           "identity": "g003"
         }
-      ],
-      "assumed_role_arns": [],
-      "source_identity": null,
-      "tags": [],
-      "custom_properties": {}
+      ]
     },
     {
       "name": "user0004",
       "email": "user004@example.com",
       "identity": "0004",
       "full_name": "User 0004",
-      "department": null,
-      "is_active": null,
-      "is_guest": null,
-      "manager_id": null,
       "groups": [
         {
           "identity": "g002"
         }
-      ],
-      "assumed_role_arns": [],
-      "source_identity": null,
-      "tags": [],
-      "custom_properties": {}
+      ]
     },
     {
       "name": "user0005",
       "email": "user005@example.com",
       "identity": "0005",
       "full_name": "User 0005",
-      "department": null,
-      "is_active": null,
-      "is_guest": null,
-      "manager_id": null,
       "groups": [
         {
           "identity": "g003"
         }
-      ],
-      "assumed_role_arns": [],
-      "source_identity": null,
-      "tags": [],
-      "custom_properties": {}
+      ]
     },
     {
       "name": "user0006",
       "email": "user006@example.com",
       "identity": "0006",
-      "full_name": "User 0006",
-      "department": null,
-      "is_active": null,
-      "is_guest": null,
-      "manager_id": null,
-      "groups": [],
-      "assumed_role_arns": [],
-      "source_identity": null,
-      "tags": [],
-      "custom_properties": {}
+      "full_name": "User 0006"
     }
   ],
   "groups": [
@@ -294,28 +298,33 @@ GENERATED_IDP_PAYLOAD = """
       "name": "group001",
       "identity": "g001",
       "full_name": "Group 001",
-      "is_security_group": null,
       "assumed_role_arns": [
         {
           "identity": "arn:aws:iam::123456789:role/Group001"
         }
       ],
-      "groups": [],
       "tags": [
         {
           "key": "grouptag",
           "value": "iamagroup"
         }
-      ],      "custom_properties": {
+      ],
+      "custom_properties": {
         "owner": "somebody"
-      }
+      },
+      "app_assignments": [
+        {
+          "id": "member",
+          "name": "Memer",
+          "app_id": "app2",
+          "custom_properties": {}
+        }
+      ]
     },
     {
       "name": "group002",
       "identity": "g002",
       "full_name": "Group 002",
-      "is_security_group": null,
-      "assumed_role_arns": [],
       "groups": [
         {
           "identity": "g003"
@@ -323,33 +332,42 @@ GENERATED_IDP_PAYLOAD = """
         {
           "identity": "g004"
         }
-      ],
-      "tags": [],
-      "custom_properties": {}
+      ]
     },
     {
       "name": "group003",
       "identity": "g003",
-      "full_name": "Group 003",
-      "assumed_role_arns": [],
-      "is_security_group": null,
-      "groups": [],
-      "tags": [],
-      "custom_properties": {}
+      "full_name": "Group 003"
     },
     {
       "name": "group004",
       "identity": "g004",
       "full_name": "Group 004",
-      "is_security_group": null,
-      "assumed_role_arns": [],
       "groups": [
         {
           "identity": "g003"
         }
-      ],
-      "tags": [],
-      "custom_properties": {}
+      ]
+    }
+  ],
+  "apps": [
+    {
+      "id": "app1",
+      "name": "Application 01",
+      "description": "",
+      "assumed_role_arns": [],
+      "custom_properties": {
+        "saml_login": true
+      },
+      "tags": []
+    },
+    {
+      "id": "app2",
+      "name": "Application 02",
+      "description": "",
+      "assumed_role_arns": [],
+      "custom_properties": {},
+      "tags": []
     }
   ]
 }

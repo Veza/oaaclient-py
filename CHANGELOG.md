@@ -1,5 +1,12 @@
 # OAA Client Change Log
 
+## v1.1.11
+* Add support for Custom IDP Apps functionality. Ability to define new `CustomIdPApp` as part of a `CustomIdPProvider` and assign `CustomIdPUser` and  `CustomIdPGroup` to the app.
+* API timeout time in seconds can be set with environment variable `OAA_API_TIMEOUT`. If unset the default 300 seconds is used.
+  ```
+  export OAA_API_TIMEOUT=500
+  ```
+
 ## v1.1.10
 * Added support for Access Credentials entity type. Access Credentials can be used to represent non-user based access such as API keys or Application Integrations that have their own roles and permissions in the application. Access Credentials can be stand-alone or assigned to a local user.
   ```python

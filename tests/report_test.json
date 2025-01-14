@@ -1,9 +1,9 @@
 {
-    "name": "pytest",
+    "name": "Pytest",
     "version": 0,
     "queries": [
         {
-            "name": "pytest Users",
+            "name": "Pytest Users",
             "description": "pytest users",
             "query_type": "SOURCE_TO_DESTINATION",
             "source_node_types": {
@@ -15,7 +15,7 @@
             }
         },
         {
-            "name": "pytest guests",
+            "name": "Pytest guests",
             "description": "pytest guests",
             "query_type": "SOURCE_TO_DESTINATION",
             "source_node_types": {
@@ -42,7 +42,7 @@
             }
         },
         {
-            "name": "pytest things",
+            "name": "Pytest things",
             "description": "Some description",
             "query_type": "SOURCE_TO_DESTINATION",
             "source_node_types": {
@@ -62,7 +62,7 @@
             }
         },
         {
-            "name": "pytest Users with Organization Admin",
+            "name": "Pytest Users with Organization Admin",
             "description": "Users who have Admin permission on the organization",
             "query_type": "SOURCE_TO_DESTINATION",
             "raw_permissions": {
@@ -87,7 +87,7 @@
             }
         },
         {
-            "name": "pytest Users with Okta Identity ",
+            "name": "Pytest Users with Okta Identity ",
             "description": "pytest users connected to an Okta Identity",
             "query_type": "SOURCE_TO_DESTINATION",
             "source_node_types": {
@@ -106,7 +106,7 @@
             }
         },
         {
-            "name": "pytest Users without Okta Identity ",
+            "name": "Pytest Users without Okta Identity ",
             "description": "pytest users not connected to an Okta Identity",
             "query_type": "SOURCE_TO_DESTINATION",
             "source_node_types": {
@@ -126,7 +126,7 @@
             "no_relation": true
         },
         {
-            "name": "pytest Users with inactive Okta Accounts",
+            "name": "Pytest Users with inactive Okta Accounts",
             "description": "pytest users connected to an Okta account that is not active",
             "query_type": "SOURCE_TO_DESTINATION",
             "source_node_types": {

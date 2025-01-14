@@ -382,10 +382,10 @@ class CustomApplication(Application):
     def add_access_cred(self, unique_id: str, name: str) -> AccessCred:
         """Create an Access Credential
 
-        Access creds can be used to represent alternative access methods such as API keys or application integrations. 
+        Access creds can be used to represent alternative access methods such as API keys or application integrations.
 
         Access creds can be assigned roles and permissions similar to local users. Access credentials can exist independently for use cases
-        such as administratively created integrations or can be assigned to a local user for use cases like personal access tokens. 
+        such as administratively created integrations or can be assigned to a local user for use cases like personal access tokens.
 
         Args:
             unique_id (str): unique identifier for access cred
@@ -995,7 +995,7 @@ class LocalUser(Identity):
             self.groups = append_helper(self.groups, group)
 
         return
-    
+
     def add_access_cred(self, access_cred: str) -> None:
         """Add access cred to user (access cred must be created separately)
 
@@ -1006,7 +1006,7 @@ class LocalUser(Identity):
         access_cred = str(access_cred)
         if access_cred in self.access_creds:
             return
-        
+
         self.access_creds.append(access_cred)
         return
 
@@ -1148,15 +1148,15 @@ class IdPIdentity(Identity):
 class AccessCred(Identity):
     """Access Credential derived from Identity base class.
 
-    Access Creds can be used to represent non-user based methods that grant access such as API keys or integrations. 
+    Access Creds can be used to represent non-user based methods that grant access such as API keys or integrations.
 
     AccessCreds can be assigned roles or permissions to an application or resource. An AccessCred can stand-alone or be associated
-    to a local user. 
+    to a local user.
 
     Args:
         unique_id (str): Unique identifier for access cred
         name (str): Name for access cred, does not need to be unique
-    
+
     Attributes:
         unique_id (str): Unique identifier for access cred
         name (str): Name for access cred, does not need to be unique
@@ -1173,7 +1173,7 @@ class AccessCred(Identity):
             raise ValueError("Unique ID cannot be empty")
         if not name:
             raise ValueError("Name cannot be empty")
-        
+
         super().__init__(name, identity_type=OAAIdentityType.AccessCred, unique_id=unique_id, property_definitions=property_definitions)
 
         self.is_active = True
@@ -1183,8 +1183,8 @@ class AccessCred(Identity):
         self.can_expire: bool|None = None
 
         return
-    
-    def to_dict(self) -> dict: 
+
+    def to_dict(self) -> dict:
         """ Output Access credential dictionary for payload """
 
         cred = {"id": self.unique_id,
@@ -1199,7 +1199,7 @@ class AccessCred(Identity):
                 }
 
         return {k: v for k, v in cred.items() if v not in [None, [], {}, ""]}
-    
+
     def set_property(self, property_name: str, property_value: any, ignore_none: bool = False) -> None:
         """ Set a custom defined property to a specific value on an access credential.
 
@@ -1695,6 +1695,8 @@ class IdPEntityType(Enum):
     USER = "USER"
     GROUP = "GROUP"
     DOMAIN = "DOMAIN"
+    APP = "APP"
+    APPASSIGNMENT = "APPASSIGNMENT"
 
 
 class IdPProviderType(str, Enum):
@@ -1744,6 +1746,7 @@ class CustomIdPProvider():
         self.domain = CustomIdPDomain(domain, property_definitions=self.property_definitions)
         self.users = CaseInsensitiveDict()
         self.groups = CaseInsensitiveDict()
+        self.apps = CaseInsensitiveDict()
 
     def __str__(self) -> str:
         return f"Custom IdP Provider {self.name} - {self.idp_type}"
@@ -1760,6 +1763,7 @@ class CustomIdPProvider():
         payload['domains'] = [self.domain.to_dict()]
         payload['users'] = [user.to_dict() for user in self.users.values()]
         payload['groups'] = [group.to_dict() for group in self.groups.values()]
+        payload['apps'] = [app.to_dict() for app in self.apps.values()]
         return payload
 
     def add_user(self, name: str, full_name: str = None, email: str = None, identity: str = None) -> CustomIdPUser:
@@ -1810,6 +1814,25 @@ class CustomIdPProvider():
         self.groups[identifier] = CustomIdPGroup(name=name, full_name=full_name, identity=identity, property_definitions=self.property_definitions)
 
         return self.groups[identifier]
+
+    def add_app(self, id: str, name: str) -> CustomIdPApp:
+        """_summary_
+
+        Args:
+            id (str): _description_
+            name (str): _description_
+
+        Raises:
+
+        Returns:
+            CustomIdPApp: _description_
+        """
+
+        if id in self.apps:
+            raise OAATemplateException(f"IdP App with ID {id} already defined")
+        self.apps[id] = CustomIdPApp(id=id, name=name, property_definitions=self.property_definitions)
+
+        return self.apps[id]
 
 
 class CustomIdPDomain():
@@ -1923,6 +1946,7 @@ class CustomIdPUser():
         self._tags = []
         self._properties = {}
         self._property_definitions = property_definitions
+        self._app_assignments = {}
 
     def __str__(self) -> str:
         return f"IdP User - {self.name} ({self.identity})"
@@ -1951,8 +1975,9 @@ class CustomIdPUser():
         user['source_identity'] = self._source_identity
         user['tags'] = [tag.__dict__ for tag in self._tags]
         user['custom_properties'] = self._properties
+        user['app_assignments'] = [r for r in self._app_assignments.values()]
 
-        return user
+        return {k: v for k, v in user.items() if v not in [None, [], {}]}
 
     def set_source_identity(self, identity: str, provider_type: IdPProviderType) -> None:
         """ Set an source external identity for user.
@@ -2003,6 +2028,35 @@ class CustomIdPUser():
         for group in group_identities:
             if group not in self._groups:
                 self._groups[group] = {"identity": group}
+
+        return
+
+    def add_app_assignment(self, id: str, name: str, app_id: str, assignment_properties: Optional[dict] = None) -> None:
+        """Create App assignment for user
+
+        Args:
+            id (str): ID of App assignment, must be unique for user
+            name (str): Name of assignment
+            app_id (str): App ID, must exist in list of Apps for IDP
+            assignment_properties (Optional[dict], optional): Optional custom properties to set. Property names must be defined first. Defaults to None.
+
+        Raises:
+            OAATemplateException: Duplicate assignment ID
+            OAATemplateException: Unknown assignment property name
+        """
+        if assignment_properties is not None and not self._property_definitions:
+            raise OAATemplateException("No custom property definitions found for app assignemnt")
+
+        if assignment_properties is None:
+            assignment_properties = {}
+
+        if id in self._app_assignments:
+            raise OAATemplateException("App assignment with ID {id} already exists for user")
+
+        for property_name in assignment_properties.keys():
+            self._property_definitions.validate_property_name(property_name, entity_type=IdPEntityType.APPASSIGNMENT)
+
+        self._app_assignments[id] = {"id": id, "name": name, "app_id": app_id, "custom_properties": assignment_properties}
 
         return
 
@@ -2076,6 +2130,7 @@ class CustomIdPGroup():
         self._tags = []
         self._properties = {}
         self._property_definitions = property_definitions
+        self._app_assignments = {}
 
     def __str__(self) -> str:
         return f"IdP Group {self.name} ({self.identity})"
@@ -2100,8 +2155,38 @@ class CustomIdPGroup():
 
         group['tags'] = [tag.__dict__ for tag in self._tags]
         group['custom_properties'] = self._properties
+        group['app_assignments'] = [r for r in self._app_assignments.values()]
 
-        return group
+        return {k: v for k, v in group.items() if v not in [None, [], {}]}
+
+    def add_app_assignment(self, id: str, name: str, app_id: str, assignment_properties: Optional[dict] = None) -> None:
+        """Create App assignment for group
+
+        Args:
+            id (str): ID of App assignment, must be unique for group
+            name (str): Name of assignment
+            app_id (str): App ID, must exist in list of Apps for IDP
+            assignment_properties (Optional[dict], optional): Optional custom properties to set. Property names must be defined first. Defaults to None.
+
+        Raises:
+            OAATemplateException: Duplicate assignment ID
+            OAATemplateException: Unknown assignment property name
+        """
+        if assignment_properties is not None and not self._property_definitions:
+            raise OAATemplateException("No custom property definitions found for app assignemnt")
+
+        if assignment_properties is None:
+            assignment_properties = {}
+
+        if id in self._app_assignments:
+            raise OAATemplateException("App assignment with ID {id} already exists for group")
+
+        for property_name in assignment_properties.keys():
+            self._property_definitions.validate_property_name(property_name, entity_type=IdPEntityType.APPASSIGNMENT)
+
+        self._app_assignments[id] = {"id": id, "name": name, "app_id": app_id, "custom_properties": assignment_properties}
+
+        return
 
     def add_assumed_role_arns(self, arns: List[str]) -> None:
         """ Add AWS Roles to list of roles group members can assume by ARN.
@@ -2183,6 +2268,108 @@ class CustomIdPGroup():
         if tag not in self._tags:
             self._tags.append(tag)
 
+class CustomIdPApp:
+    """App model for CustomIdPProvider
+
+    Args:
+        id (str): ID for App, must be unique
+        name (str): Name for App
+        property_definitions (IdPPropertyDefinitions, optional): Custom property definitions, required to set custom properties. Defaults to None.
+
+    Attributes:
+        id (str): ID for App, must be unique
+        name (str): Name for App
+        description (str): Description property for App
+    """
+
+    def __init__(self, id: str, name: str, property_definitions: IdPPropertyDefinitions = None) -> None:
+
+        self.id = id
+        self.name = name
+        self.description = ""
+
+        self._assumed_roles = {}
+        self._tags = []
+        self._properties = {}
+        self._property_definitions = property_definitions
+
+    def __str__(self) -> str:
+        return f"IdP App - {self.name} ({self.id})"
+
+    def __repr__(self) -> str:
+        return f"CustomIdPApp(id={self.id!r}, name={self.name!r})"
+
+    def to_dict(self) -> dict:
+        app = {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "assumed_role_arns": [r for r in self._assumed_roles.values()],
+            "custom_properties": self._properties,
+            "tags": [tag.__dict__ for tag in self._tags]
+        }
+        return app
+
+    def add_assumed_role_arns(self, arns: List[str]) -> None:
+        """ Add AWS Roles to list of roles App can assume by ARN. Any Users or Groups assigned to the App are represented as being able to assume the roles.
+
+        Args:
+            arns (list): list of role ARNs as strings that the user is allowed to assume
+
+        """
+
+        if not isinstance(arns, list):
+            raise OAATemplateException("arns must be of type list")
+
+        for arn in arns:
+            if arn not in self._assumed_roles:
+                self._assumed_roles[arn] = {"identity": arn}
+
+        return
+
+    def set_property(self, property_name: str, property_value: any, ignore_none: bool = False) -> None:
+        """ Set custom property value for app.
+
+        Property name must be defined for app before calling `set_property()`. See example below and
+        `IdPPropertyDefinitions.define_app_property` for more information.
+
+        Args:
+            property_name (str): Name of property
+            property_value (Any): Value for property, type should match OAAPropertyType for property definition
+            ignore_none (bool, optional): Do not set property if value is None. Defaults to False.
+
+        Raises:
+            OAATemplateException: If property with `property_name` is not defined.
+
+        Example:
+            >>> idp = CustomIdPProvider(name="Example IdP", idp_type="example", domain="example.com")
+            >>> idp.property_definitions.define_app_property(name="my_property", property_type=OAAPropertyType.STRING)
+            >>> app1 = idp.add_app(id="app1", ="App 1")
+            >>> app1.set_property("my_property", "app1 value")
+        """
+
+        if not self._property_definitions:
+            raise OAATemplateException("No custom property definitions found for app")
+
+        if ignore_none and property_value is None:
+            return
+
+        self._property_definitions.validate_property_name(property_name, entity_type=IdPEntityType.APP)
+        self._properties[property_name] = property_value
+
+    def add_tag(self, key: str, value: str = "") -> None:
+        """ Add a new tag to IdP User.
+
+        Args:
+            key (str): Key for tag, aka name. Must be present and must be letters, numbers or _ (underscore) only.
+            value (str, optional): Value for Tag, will appear in Veza as `key:value`. Must be letters, numbers, whitespace and the special characters @,._- only. Defaults to "".
+        """
+
+        tag = Tag(key=key, value=value)
+        if tag not in self._tags:
+            self._tags.append(tag)
+
+
 class IdPPropertyDefinitions():
     """
     Model for defining custom properties for CustomIdPProvider and its entities (users, groups, domain).
@@ -2201,6 +2388,8 @@ class IdPPropertyDefinitions():
         self.domain_properties = {}
         self.user_properties = {}
         self.group_properties = {}
+        self.app_properties = {}
+        self.app_assignment_properties = {}
 
     def __str__(self) -> str:
         return f"IdP Property Definitions"
@@ -2213,7 +2402,9 @@ class IdPPropertyDefinitions():
 
         return {"domain_properties": self.domain_properties,
                 "user_properties": self.user_properties,
-                "group_properties": self.group_properties
+                "group_properties": self.group_properties,
+                "app_properties": self.app_properties,
+                "app_assignment_properties": self.app_assignment_properties
                 }
 
     def define_domain_property(self, name: str, property_type: OAAPropertyType) -> None:
@@ -2246,6 +2437,26 @@ class IdPPropertyDefinitions():
         self._validate_types(name, property_type)
         self.group_properties[name] = property_type
 
+    def define_app_property(self, name: str, property_type: OAAPropertyType) -> None:
+        """Define an app custom property
+
+        Args:
+            name (str): name of property
+            property_type (OAAPropertyType): type for property
+        """
+        self._validate_types(name, property_type)
+        self.app_properties[name] = property_type
+
+    def define_app_assignment_property(self, name: str, property_type: OAAPropertyType) -> None:
+        """Define an app assignment custom property
+
+        Args:
+            name (str): name of property
+            property_type (OAAPropertyType): type for property
+        """
+        self._validate_types(name, property_type)
+        self.app_assignment_properties[name] = property_type
+
     def validate_property_name(self, property_name: str, entity_type: str) -> None:
         """ Validate that a property name has been defined for a given IdP entity.
 
@@ -2266,6 +2477,10 @@ class IdPPropertyDefinitions():
             valid_property_names = self.user_properties.keys()
         elif entity_type == IdPEntityType.GROUP:
             valid_property_names = self.group_properties.keys()
+        elif entity_type == IdPEntityType.APP:
+            valid_property_names = self.app_properties.keys()
+        elif entity_type == IdPEntityType.APPASSIGNMENT:
+            valid_property_names = self.app_assignment_properties.keys()
         else:
             raise OAATemplateException(f"Unknown entity type '{entity_type}', cannot validate property names")
 
