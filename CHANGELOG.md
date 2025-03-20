@@ -1,5 +1,13 @@
 # OAA Client Change Log
 
+## v1.1.12
+*  Add support for setting IDP user `identity_type` for identifying non-human identity (NHI) accounts. IDP User's attribute `identity_type` can be set using the `IdPUserIdentityType` enum. Accounts default to `HUMAN`.
+   ```
+    svc_account = idp.add_user("svc_01", "Service Account", "helpdesk@example.com", "svc_01")
+    svc_account.identity_type = IdPUserIdentityType.NonHuman
+    ```
+* Add `update_provisioning_status` method to `OAAClient` class. Allows enabling provisioning source on providers that support is such as HRIS template providers.
+
 ## v1.1.11
 * Add support for Custom IDP Apps functionality. Ability to define new `CustomIdPApp` as part of a `CustomIdPProvider` and assign `CustomIdPUser` and  `CustomIdPGroup` to the app.
 * API timeout time in seconds can be set with environment variable `OAA_API_TIMEOUT`. If unset the default 300 seconds is used.

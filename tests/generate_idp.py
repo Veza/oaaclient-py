@@ -10,7 +10,7 @@ import logging
 import sys
 
 from oaaclient.client import OAAClient, OAAClientError
-from oaaclient.templates import CustomIdPProvider, OAAPropertyType, IdPProviderType
+from oaaclient.templates import CustomIdPProvider, OAAPropertyType, IdPProviderType, IdPUserIdentityType
 
 
 def generate_idp():
@@ -50,6 +50,7 @@ def generate_idp():
     user0001.set_source_identity("user0001@corp.example.com", IdPProviderType.OKTA)
     user0001.add_assumed_role_arns(["arn:aws:iam::123456789:role/BackEnd"])
     user0001.add_tag("tagnovalue")
+    user0001.identity_type = IdPUserIdentityType.Human
 
     user0002.department = "Sales"
     user0002.is_active = False
@@ -89,6 +90,10 @@ def generate_idp():
 
     app2 = idp.add_app(id="app2", name="Application 02")
     group001.add_app_assignment(id="member", name="Memer", app_id="app2")
+
+    svc_account = idp.add_user("svc_01", "Service Account", "helpdesk@example.com", "svc_01")
+    svc_account.identity_type = IdPUserIdentityType.NonHuman
+
     return idp
 
 def main():
@@ -211,7 +216,8 @@ GENERATED_IDP_PAYLOAD = """
             "added_on": "2024-02-16T08:18:23.254Z"
           }
         }
-      ]
+      ],
+      "identity_type": "HUMAN"
     },
     {
       "name": "user0002",
@@ -291,6 +297,13 @@ GENERATED_IDP_PAYLOAD = """
       "email": "user006@example.com",
       "identity": "0006",
       "full_name": "User 0006"
+    },
+    {
+      "name": "svc_01",
+      "email": "helpdesk@example.com",
+      "identity": "svc_01",
+      "full_name": "Service Account",
+      "identity_type": "NONHUMAN"
     }
   ],
   "groups": [

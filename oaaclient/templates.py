@@ -1908,6 +1908,14 @@ class CustomIdPDomain():
         if tag not in self._tags:
             self._tags.append(tag)
 
+class IdPUserIdentityType(str, Enum):
+    """ Types of identities for permission mapping. """
+    Human = "HUMAN"
+    NonHuman = "NONHUMAN"
+
+    def __repr__(self) -> str:
+        return f'{self.__class__.__name__}.{self.name}'
+
 class CustomIdPUser():
     """ User model for CustomIdPProvider.
 
@@ -1926,6 +1934,7 @@ class CustomIdPUser():
         is_active (bool): if user is active, defaults to None
         is_guest (bool): if user is a guest type user, defaults to None
         manager_id (str, optional): CustomIdPUser.identity of manager, defaults to None
+        identity_type (IdPUserIdentityType, optional): Identity type for user (HUMAN, NONHUMAN), defaults to HUMAN if not set.
 
     """
 
@@ -1939,6 +1948,7 @@ class CustomIdPUser():
         self.is_active = None
         self.is_guest = None
         self.manager_id = None
+        self.identity_type = None
 
         self._source_identity = None
         self._groups = {}
@@ -1976,6 +1986,7 @@ class CustomIdPUser():
         user['tags'] = [tag.__dict__ for tag in self._tags]
         user['custom_properties'] = self._properties
         user['app_assignments'] = [r for r in self._app_assignments.values()]
+        user['identity_type'] = self.identity_type
 
         return {k: v for k, v in user.items() if v not in [None, [], {}]}
 
@@ -2051,7 +2062,7 @@ class CustomIdPUser():
             assignment_properties = {}
 
         if id in self._app_assignments:
-            raise OAATemplateException("App assignment with ID {id} already exists for user")
+            raise OAATemplateException(f"App assignment with ID {id} already exists for user")
 
         for property_name in assignment_properties.keys():
             self._property_definitions.validate_property_name(property_name, entity_type=IdPEntityType.APPASSIGNMENT)

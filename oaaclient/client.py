@@ -294,6 +294,19 @@ class OAAClient():
         self.api_post(f"/api/v1/providers/custom/{provider_id}:icon", data=icon_payload)
 
         return None
+    
+    def update_provisioning_status(self, provider_id: str, provisioning: bool) -> None:
+        """ Update HRIS provider to be a system of record for Lifecycle Management (LCM).
+
+        Args:
+            provider_id (str): unique ID of existing provider
+            provisioning (bool): set to True to enable LCM, False to disable
+
+        """
+
+        payload = {"provisioning": provisioning}
+        response = self.api_patch(f"/api/v1/providers/custom/{provider_id}", data=payload)
+        return response
 
     def delete_provider(self, provider_id: str) -> dict:
         """Delete an existing provider by ID.
