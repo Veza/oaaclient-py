@@ -6,6 +6,7 @@ license that can be found in the LICENSE file or at
 https://opensource.org/licenses/MIT.
 """
 
+import json
 import os
 import re
 import time
@@ -264,3 +265,28 @@ def test_hris_payload_push(veza_con, hris_provider):
             time.sleep(4)
 
     return
+
+
+@pytest.mark.skipif(not os.getenv("PYTEST_VEZA_HOST"), reason="Test host is not configured")
+@pytest.mark.timeout(TEST_TIMEOUT)
+def test_api_multipart_push(veza_con, app_provider):
+
+    app = generate_app()
+    data_source_name = os.environ.get('PYTEST_CURRENT_TEST').replace("/", "-")
+    datasource = veza_con.create_data_source(data_source_name, app_provider['id'])
+
+    json_str = json.dumps(app.get_payload())
+    response = veza_con.datasource_push_parts(provider_id=app_provider["id"], data_source_id=datasource["id"], json_data=json_str, options=None, part_size=512)
+
+    if not response:
+        assert False
+
+    while True:
+        data_source = veza_con.get_data_source(data_source_name, provider_id=app_provider["id"])
+        if data_source["status"] == "SUCCESS":
+            break
+        elif FAILURE_REGEX.match(data_source["status"]):
+            print(data_source)
+            assert False, "Datasource parsing failure"
+        else:
+            time.sleep(4)

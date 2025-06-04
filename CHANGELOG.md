@@ -1,5 +1,15 @@
 # OAA Client Change Log
 
+## v1.1.14
+* Support for multipart payload upload for large OAA payloads. Multipart must be enabled by setting `enable_multipart` to `True` on the `OAAClient` connection instance
+  ```python
+  veza_con = OAAClient(url=veza_url, api_key=veza_api_key)
+  veza_con.enable_multipart = True
+  ```
+
+## v1.1.13
+* Add support for setting source identity on IDP Groups using `CustomIdPGroup.set_source_identity(identity: str, provider_type: IdPProviderType)` function. Allows connecting Custom IDP Groups to existing IDP groups in other Veza IDPs such as Okta, AzureAD and Active Directory.
+
 ## v1.1.12
 *  Add support for setting IDP user `identity_type` for identifying non-human identity (NHI) accounts. IDP User's attribute `identity_type` can be set using the `IdPUserIdentityType` enum. Accounts default to `HUMAN`.
    ```

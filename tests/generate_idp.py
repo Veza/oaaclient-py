@@ -62,6 +62,7 @@ def generate_idp():
     group001.set_property("owner", "somebody")
     group001.add_assumed_role_arns(["arn:aws:iam::123456789:role/Group001"])
     group001.add_tag("grouptag", "iamagroup")
+    group001.set_source_identity("group001@corp.example.com", IdPProviderType.OKTA)
 
     idp.add_group(name="group002", full_name="Group 002", identity="g002")
     idp.add_group(name="group003", full_name="Group 003", identity="g003")
@@ -316,6 +317,10 @@ GENERATED_IDP_PAYLOAD = """
           "identity": "arn:aws:iam::123456789:role/Group001"
         }
       ],
+      "source_identity": {
+        "identity": "group001@corp.example.com",
+        "provider_type": "okta"
+      },
       "tags": [
         {
           "key": "grouptag",

@@ -2136,6 +2136,7 @@ class CustomIdPGroup():
 
         self.is_security_group = None
 
+        self._source_identity = None
         self._groups = {}
         self._assumed_roles = {}
         self._tags = []
@@ -2163,12 +2164,30 @@ class CustomIdPGroup():
         group['is_security_group'] = self.is_security_group
         group['assumed_role_arns'] = [r for r in self._assumed_roles.values()]
         group['groups'] = [g for g in self._groups.values()]
-
+        group['source_identity'] = self._source_identity
         group['tags'] = [tag.__dict__ for tag in self._tags]
         group['custom_properties'] = self._properties
         group['app_assignments'] = [r for r in self._app_assignments.values()]
 
         return {k: v for k, v in group.items() if v not in [None, [], {}]}
+
+    def set_source_identity(self, identity: str, provider_type: IdPProviderType) -> None:
+        """ Set an source external identity for group.
+
+        - `source_identity` will connect CustomIDP group to a Veza graph IdP group.
+        - `provider_type` limits scope for finding matching IdP group identities
+        - search all providers with `IdPProviderType.ANY`.
+
+        Args:
+            identity (str): Unique Identity of the source group
+            provider_type (IdPProviderType): Type for provider to match source identity from
+
+        """
+        if not isinstance(provider_type, IdPProviderType):
+            raise OAATemplateException("provider_type must be IdPProviderType enum")
+
+        self._source_identity = {"identity": identity, "provider_type": provider_type}
+        return None
 
     def add_app_assignment(self, id: str, name: str, app_id: str, assignment_properties: Optional[dict] = None) -> None:
         """Create App assignment for group

@@ -116,6 +116,15 @@ class OAAClient():
     # default number of seconds for API requests before timeout
     DEFAULT_API_TIMEOUT = 300
 
+    # max size for a single OAA payload operation
+    MAX_PAYLOAD_SIZE = 100_000_000
+
+    # OAA payload size to switch to using multipart by default, this is the pre-compression size
+    MULTIPART_THRESHOLD_SIZE = 50_000_000
+
+    # Default size to split payload into for multipart upload
+    DEFAULT_PART_SIZE = 50_000_000
+
     def __init__(self, url:str = None, api_key: str = None, username: str = None, token: str = None):
 
         if not url and "VEZA_URL" in os.environ:
@@ -154,6 +163,9 @@ class OAAClient():
 
         # enable payload compression by default, connection object property can be set to False to disable
         self.enable_compression = True
+
+        # enable multipart payload upload; default to false
+        self.enable_multipart = False
 
 
         try:
@@ -294,7 +306,7 @@ class OAAClient():
         self.api_post(f"/api/v1/providers/custom/{provider_id}:icon", data=icon_payload)
 
         return None
-    
+
     def update_provisioning_status(self, provider_id: str, provisioning: bool) -> None:
         """ Update HRIS provider to be a system of record for Lifecycle Management (LCM).
 
@@ -451,34 +463,15 @@ class OAAClient():
             with open(out_name, "w") as f:
                 f.write(json.dumps(metadata, indent=2))
 
-        if self.enable_compression:
-            log.debug("Compressing payload")
-            metadata_bytes = json.dumps(metadata).encode()
-            metadata_size = sys.getsizeof(metadata_bytes)
-            compressed_bytes = gzip.compress(metadata_bytes)
-            del metadata_bytes
+        json_data_str = json.dumps(metadata, separators=(',', ':'))
+        json_data_size = sys.getsizeof(json_data_str)
 
-            encoded = base64.b64encode(compressed_bytes).decode()
-            encoded_size = sys.getsizeof(encoded)
-            del compressed_bytes
-            log.debug(f"Compression complete, payload size in bytes: {metadata_size:,}, encoded compressed: {encoded_size:,}")
-            payload = {"id": provider["id"], "data_source_id": data_source["id"], "json_data": encoded, "compression_type": "GZIP"}
+        log.debug(f"OAA json_data string size {json_data_size:,}")
+        if self.enable_multipart and json_data_size > self.MULTIPART_THRESHOLD_SIZE:
+            log.debug("Using multipart payload push")
+            result = self.datasource_push_parts(provider_id=provider["id"], data_source_id=data_source["id"], json_data=json_data_str, options=options)
         else:
-            payload = {"id": provider["id"], "data_source_id": data_source["id"], "json_data": json.dumps(metadata)}
-
-        if options and isinstance(options, dict):
-            log.debug(f"Provider create called with additional options: {options}")
-            payload.update(options)
-        elif options and not isinstance(options, dict):
-            raise ValueError("options parameter must be dictionary")
-
-        payload_size = sys.getsizeof(payload["json_data"])
-        if payload_size > 100_000_000:
-            raise OAAClientError("OVERSIZE", message=f"Payload size exceeds maximum size of 100MB: {payload_size:,} bytes, compression enabled: {self.enable_compression}")
-
-        log.debug(f"Final payload size: {payload_size:,} bytes")
-        result = self.api_post(f"/api/v1/providers/custom/{provider['id']}/datasources/{data_source['id']}:push", payload)
-
+            result = self.datasource_push(provider_id=provider["id"], data_source_id=data_source["id"], json_data=json_data_str, options=options)
         return result
 
     def push_application(self,
@@ -524,8 +517,129 @@ class OAAClient():
                 self.create_provider(provider_name, custom_template=application_object.TEMPLATE)
 
         metadata = application_object.get_payload()
-
         return self.push_metadata(provider_name=provider_name, data_source_name=data_source_name, metadata=metadata, save_json=save_json, options=options)
+
+    def datasource_push(self, provider_id: str, data_source_id: str, json_data: str, options: dict|None = None) -> dict:
+        """Push OAA Payload
+
+        Uploads the OAA payload to the datasource `:push` operation
+
+        Args:
+            provider_id (str): Provider ID
+            datasource_id (str): Datasource ID
+            payload (str): OAA payload as string
+            options (dict | None, optional): Additional dictionary of key/values to be included in push API call. Defaults to None.
+
+        Raises:
+            ValueError: Invalid `optionas` format
+            OAAClientError: Errors returned by Veza API
+
+        Returns:
+            dict: API response
+        """
+
+        if not isinstance(json_data, str):
+            raise ValueError("json_data parameter must be string") # we need better variable names
+
+        if self.enable_compression:
+            log.debug("Compressing payload")
+            json_data_bytes = json_data.encode()
+            json_data_size = sys.getsizeof(json_data_bytes)
+            compressed_bytes = gzip.compress(json_data_bytes)
+            del json_data_bytes
+
+            encoded = base64.b64encode(compressed_bytes).decode()
+            encoded_size = sys.getsizeof(encoded)
+            del compressed_bytes
+            log.debug(f"Compression complete, payload size in bytes: {json_data_size:,}, encoded compressed: {encoded_size:,}")
+            payload = {"id": provider_id, "data_source_id": data_source_id, "json_data": encoded, "compression_type": "GZIP"}
+        else:
+            payload = {"id": provider_id, "data_source_id": data_source_id, "json_data": json_data}
+
+        if options and isinstance(options, dict):
+            log.debug(f"Provider create called with additional options: {options}")
+            payload.update(options)
+        elif options and not isinstance(options, dict):
+            raise ValueError("options parameter must be dictionary")
+
+        payload_size = sys.getsizeof(payload["json_data"])
+        if payload_size > self.MAX_PAYLOAD_SIZE:
+            # we should try to switch over to multipart here, except we've already deleted the original payload
+            raise OAAClientError("OVERSIZE", message=f"Payload size exceeds maximum size of 100MB: {payload_size:,} bytes, compression enabled: {self.enable_compression}")
+
+        log.debug(f"Final payload size: {payload_size:,} bytes")
+        result = self.api_post(f"/api/v1/providers/custom/{provider_id}/datasources/{data_source_id}:push", payload)
+        return result
+
+    def datasource_push_parts(self, provider_id: str, data_source_id: str, json_data: str, options: dict|None = None, **configs) -> dict:
+        """Push OAA Payload in parts
+
+        Push the data source payload in parts using the `:push-parts` operation. Necessary for large payloads.
+
+        Function will automatically start a multipart upload, split the payload into parts to upload and return the output from the
+        complete upload operation which is the same output as from a normal OAA data source `:push` operation. Returned result will include
+        any OAA validation warnings or errors.
+
+        Args:
+            provider_id (str): Provider ID
+            datasource_id (str): Data source ID
+            json_data (str): OAA Payload JSON as string
+            options (dict | None, optional): Additional dictionary of key/values to be included in push API call. Defaults to None.
+
+        Raises:
+            ValueError: Input errors
+            OAAClientError: Errors returned by the Veza API
+
+        Returns:
+            dict: API response of upload complete operation
+        """
+
+        if not isinstance(json_data, str):
+            raise ValueError("json_data parameter must be string") # we need better variable names
+
+        part_size = configs.get("part_size", self.DEFAULT_PART_SIZE)
+        if not isinstance(part_size, int):
+            raise ValueError("part_size must be integer")
+
+        if part_size > self.MAX_PAYLOAD_SIZE:
+            raise ValueError(f"part_size cannot be greate than max payload size self.MAX_PAYLOAD_SIZE")
+        elif part_size < 0:
+            raise ValueError(f"part_size must be greater than 0")
+
+        log.debug(f"Part size: {part_size}")
+        # configs would contain additional atributes for like the split size if we weren't doing the defaults
+        json_data_bytes = json_data.encode()
+
+        parts = len(json_data_bytes) / part_size
+        log.debug(f"Splitting into {parts} parts")
+        url = f"/api/v1/providers/custom/{provider_id}/datasources/{data_source_id}:parts"
+        # Start the upload
+        log.debug("Starting multipart upload")
+        start_operation = {"operation": "start"} # this shouldn't be strings
+        result = self.api_post(url, start_operation, None)
+        upload_id = result.get("upload_id")
+
+        if not upload_id:
+            raise OAAClientError(error="BadResponse", message="Start multipart push did not returl an upload ID")
+        log.debug(f"Upload started, upload ID: {upload_id}")
+
+        sequence_id = 0
+        for i in range(0, len(json_data_bytes), part_size):
+            sequence_id+=1
+            chunk_end = i + part_size
+            if chunk_end > len(json_data_bytes):
+                chunk_end = len(json_data_bytes) # off by one?
+
+            encoded_part = base64.b64encode(json_data_bytes[i:i+part_size])
+            part_operation = {"operation": "upload", "upload_id": upload_id, "sequence_number": sequence_id, "data": encoded_part.decode() }
+            result = self.api_post(url, part_operation, None)
+            log.debug(f"Uploaded part: {sequence_id}, {result}")
+
+        log.debug(f"Submitting complete operation for upload: {upload_id}")
+        finish_operation = {"operation": "complete", "upload_id": upload_id, "sequence_count": sequence_id}
+        result = self.api_post(url, finish_operation, None)
+        log.debug(f"Multi-part upload finished, total sequences: {sequence_id}")
+        return result
 
     def get_queries(self, include_inactive_queries:bool = True) -> list[dict]:
         """Get all saved Assessment Queries
