@@ -460,9 +460,6 @@ CUSTOM_PROPERTIES_PAYLOAD = """
       "local_roles": [
         {
           "name": "operators",
-          "permissions": [],
-          "roles": [],
-          "tags": [],
           "custom_properties": {
             "built_in": true
           }

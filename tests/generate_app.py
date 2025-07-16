@@ -401,8 +401,6 @@ GENERATED_APP_PAYLOAD = """
             "Admin",
             "Manage_Thing"
           ],
-          "roles": [],
-          "tags": [],
           "custom_properties": {
             "role_id": 1,
             "custom": true
@@ -413,8 +411,6 @@ GENERATED_APP_PAYLOAD = """
           "permissions": [
             "view"
           ],
-          "roles": [],
-          "tags": [],
           "custom_properties": {
             "role_id": 1
           }
@@ -428,17 +424,12 @@ GENERATED_APP_PAYLOAD = """
           "roles": [
             "role2"
           ],
-          "tags": [],
           "custom_properties": {
             "role_id": 3
           }
         },
         {
-          "name": "empty_role",
-          "permissions": [],
-          "roles": [],
-          "tags": [],
-          "custom_properties": {}
+          "name": "empty_role"
         }
       ],
       "local_access_creds": [],

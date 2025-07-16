@@ -12,7 +12,7 @@ import sys
 from enum import unique
 
 from oaaclient.client import OAAClient, OAAClientError
-from oaaclient.templates import CustomApplication, OAAPermission, OAAPropertyType
+from oaaclient.templates import CustomApplication, OAAPermission, OAAPropertyType, OAAOwnerType
 
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(thread)d %(message)s', level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -64,7 +64,8 @@ def generate_app_id_mapping():
     user_list = [{"name": "Megan", "id": 1234},
                  {"name": "Scott", "id": 1235},
                  {"name": "Amanda", "id": 1236},
-                 {"name": "Paul", "id": 1237}
+                 {"name": "Paul", "id": 1237},
+                 {"name": "svc_account", "id": 9999}
                  ]
 
     for user_info in user_list:
@@ -81,11 +82,15 @@ def generate_app_id_mapping():
         user.set_property("is_guest", False)
         user.set_property("birthday", "2000-01-01T00:00:00.000Z")
 
+    svc_account = app.local_users[9999]
+    svc_account.add_owner(external_id="it_help@example.com", owner_type=OAAOwnerType.OktaUser)
+
     # groups
     app.property_definitions.define_local_group_property("group_id", OAAPropertyType.NUMBER)
     group1 = app.add_local_group("group1", unique_id="g1")
     group1.created_at = "2001-01-01T00:00:00.000Z"
     group1.set_property("group_id", 1)
+    group1.add_owner(external_id="it_help@example.com", owner_type=OAAOwnerType.OktaUser, is_primary=True)
 
     app.local_users[1234].add_group("g1")
     app.local_users[1235].add_group("g1")
@@ -109,6 +114,7 @@ def generate_app_id_mapping():
     role1 = app.add_local_role("role1", unique_id="r1",  permissions=["all", "Admin"])
     role1.set_property("role_id", 1)
     role1.set_property("custom", False)
+    role1.add_owner(external_id="it_help@example.com", owner_type=OAAOwnerType.OktaUser, is_primary=True)
 
     role2 = app.add_local_role("role2", unique_id="r2", permissions=["view"])
     role2.set_property("role_id", 1)
@@ -127,6 +133,7 @@ def generate_app_id_mapping():
     thing1.set_property("hair_color", "blue")
     thing1.set_property("peers", ["thing2", "thing3"])
     thing1.set_property("publish_date", "1959-03-12T00:00:00.000Z")
+    thing1.add_owner(external_id="it_help@example.com", owner_type=OAAOwnerType.OktaUser, is_primary=False)
 
     thing2 = app.add_resource("thing2", unique_id="t2", resource_type="thing")
     thing2.set_property("private", False)
@@ -157,6 +164,7 @@ def generate_app_id_mapping():
     access_cred_1.set_property("is_oauth", False)
     access_cred_1.set_property("generation", "v2")
     access_cred_1.add_role("r1", apply_to_application=True)
+    access_cred_1.add_owner(external_id="it_help@example.com", owner_type=OAAOwnerType.OktaUser, is_primary=True)
 
     access_cred_2 = app.add_access_cred("cred002", "Access Cred 002")
     access_cred_2.is_active = False
@@ -332,6 +340,29 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
             "birthday": "2000-01-01T00:00:00.000Z"
           },
           "id": "1237"
+        },
+        {
+          "name": "svc_account",
+          "identities": [
+            "svc_account@example.com"
+          ],
+          "is_active": true,
+          "created_at": "2001-01-01T00:00:00.000Z",
+          "last_login_at": "2002-02-01T00:00:00.000Z",
+          "deactivated_at": "2003-03-01T00:00:00.000Z",
+          "password_last_changed_at": "2004-04-01T00:00:00.000Z",
+          "custom_properties": {
+            "is_guest": false,
+            "birthday": "2000-01-01T00:00:00.000Z"
+          },
+          "owners": [
+            {
+              "external_id": "it_help@example.com",
+              "owner_type": "oktauser",
+              "primary": false
+            }
+          ],
+          "id": "9999"
         }
       ],
       "local_groups": [
@@ -341,6 +372,13 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
           "custom_properties": {
             "group_id": 1
           },
+          "owners": [
+            {
+              "external_id": "it_help@example.com",
+              "owner_type": "oktauser",
+              "primary": true
+            }
+          ],
           "id": "g1"
         },
         {
@@ -367,12 +405,17 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
             "all",
             "Admin"
           ],
-          "roles": [],
-          "tags": [],
           "custom_properties": {
             "role_id": 1,
             "custom": true
           },
+          "owners": [
+            {
+              "external_id": "it_help@example.com",
+              "owner_type": "oktauser",
+              "primary": true
+            }
+          ],
           "id": "r1"
         },
         {
@@ -380,8 +423,6 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
           "permissions": [
             "view"
           ],
-          "roles": [],
-          "tags": [],
           "custom_properties": {
             "role_id": 1
           },
@@ -397,6 +438,13 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
           "expires_at": "2040-04-15T00:00:00.000Z",
           "last_used_at": "2024-03-12T00:00:00.000Z",
           "can_expire": true,
+          "owners": [
+            {
+              "external_id": "it_help@example.com",
+              "owner_type": "oktauser",
+              "primary": true
+            }
+          ],
           "custom_properties": {
             "is_oauth": false,
             "generation": "v2"
@@ -440,7 +488,14 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
               "thing3"
             ],
             "publish_date": "1959-03-12T00:00:00.000Z"
-          }
+          },
+          "owners": [
+            {
+              "external_id": "it_help@example.com",
+              "owner_type": "oktauser",
+              "primary": false
+            }
+          ]
         },
         {
           "id": "t2",

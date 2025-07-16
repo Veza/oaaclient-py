@@ -1,5 +1,12 @@
 # OAA Client Change Log
 
+## v1.1.15
+* **Early Access** Add support for setting Entity Owners for the Custom Application template. Entity owners can be set on the Application, Local User, Groups, Roles, Access Creds and Resources using the `add_owner` operation on the object.
+  ```python
+  local_role = app.add_local_role(unique_id="admins", name="Administrators", permissions=perm_list)
+  local_role.add_owner(external_id="john_doe@example.com", owner_type=OAAOwnerType.OktaUser)
+  ```
+
 ## v1.1.14
 * Support for multipart payload upload for large OAA payloads. Multipart must be enabled by setting `enable_multipart` to `True` on the `OAAClient` connection instance
   ```python

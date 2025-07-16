@@ -62,6 +62,16 @@ class OAAIdentityType(str, Enum):
     def __repr__(self) -> str:
         return f'{self.__class__.__name__}.{self.name}'
 
+class OAAOwnerType(str, Enum):
+    """ Node types for entity owners """
+    ActiveDirectoryUser = "activedirectoryuser"
+    AzureADUser = "azureaduser"
+    GoogleWorkspaceUser = "googleworkspaceuser"
+    OktaUser = "oktauser"
+
+    def __repr__(self) -> str:
+        return f'{self.__class__.__name__}.{self.name}'
+
 class Provider():
     """Base class for CustomProvider. """
     def __init__(self, name, custom_template):
@@ -126,6 +136,7 @@ class CustomApplication(Application):
         self.tags = []
         self.property_definitions = ApplicationPropertyDefinitions(application_type)
         self.properties = {}
+        self.owners = []
 
         self.custom_permissions = CaseInsensitiveDict()
 
@@ -167,6 +178,9 @@ class CustomApplication(Application):
                 "tags": [tag.__dict__ for tag in self.tags],
                 "custom_properties": self.properties
                 }
+
+        if self.owners:
+            repr["owners"] = [owner.__dict__ for owner in self.owners]
 
         repr['resources'] = [resource.to_dict() for resource in self.resources.values()]
         return repr
@@ -448,6 +462,20 @@ class CustomApplication(Application):
 
         return
 
+    def add_owner(self, external_id: str, owner_type: str, is_primary: bool = False) -> None:
+        """Add Entity Owner
+
+        Add an entity owner to the application.
+
+        Args:
+            external_id (str): IDP identity of the owner
+            owner_type (str): IDP Node type of the entity, `OAAOwnerType` enum. For Custom IDP owner_type should be `OAA.<IDPType>.IDPUser`
+            is_primary (bool, optional): Is Primary Owner. Defaults to False.
+        """
+        owner = EntityOwner(external_id=external_id, owner_type=owner_type, is_primary=is_primary)
+        if owner not in self.owners:
+            self.owners.append(owner)
+
     def add_access(self, identity, identity_type, permission, resource=None):
         """ Legacy method for backwards compatibility.
 
@@ -558,6 +586,8 @@ class CustomResource():
 
         self.resource_permissions = {}
 
+        self.owners = []
+
     def __str__(self) -> str:
         return f"Resource: {self.name} ({self.unique_id}) - {self.resource_type}"
 
@@ -578,6 +608,7 @@ class CustomResource():
         repr["sub_resources"] = [sub_resource.to_dict() for sub_resource in self.sub_resources.values()]
         repr['custom_properties'] = self.properties
         repr["tags"] = [tag.__dict__ for tag in self.tags]
+        repr["owners"] = [owner.__dict__ for owner in self.owners]
 
         # filter out None/empty values before return
         return {k: v for k, v in repr.items() if v}
@@ -685,6 +716,19 @@ class CustomResource():
         self.property_definitions.validate_property_name(property_name, "resource", self.resource_type)
         self.properties[property_name] = property_value
 
+    def add_owner(self, external_id: str, owner_type: str, is_primary: bool = False) -> None:
+        """Add Entity Owner
+
+        Add an entity owner to the resource.
+
+        Args:
+            external_id (str): IDP identity of the owner
+            owner_type (str): IDP Node type of the entity, `OAAOwnerType` enum. For Custom IDP owner_type should be `OAA.<IDPType>.IDPUser`
+            is_primary (bool, optional): Is Primary Owner. Defaults to False.
+        """
+        owner = EntityOwner(external_id=external_id, owner_type=owner_type, is_primary=is_primary)
+        if owner not in self.owners:
+            self.owners.append(owner)
 
 class Identity():
     """Base class for deriving all identity types (should not be used directly).
@@ -718,6 +762,7 @@ class Identity():
         self.property_definitions = property_definitions
         self.properties = {}
         self.tags = []
+        self.owners = []
 
     def add_permission(self, permission: str, resources: List[CustomResource] = None, apply_to_application: bool = False) -> None:
         """
@@ -857,6 +902,20 @@ class Identity():
         tag = Tag(key=key, value=value)
         if tag not in self.tags:
             self.tags.append(tag)
+
+    def add_owner(self, external_id: str, owner_type: str, is_primary: bool = False) -> None:
+        """Add Entity Owner
+
+        Add an entity owner for user or group.
+
+        Args:
+            external_id (str): IDP identity of the owner
+            owner_type (str): IDP Node type of the entity, `OAAOwnerType` enum. For Custom IDP owner_type should be `OAA.<IDPType>.IDPUser`
+            is_primary (bool, optional): Is Primary Owner. Defaults to False.
+        """
+        owner = EntityOwner(external_id=external_id, owner_type=owner_type, is_primary=is_primary)
+        if owner not in self.owners:
+            self.owners.append(owner)
 
     def set_property(self, property_name: str, property_value: any, ignore_none: bool = False) -> None:
         """ Set a custom defined property to a specific value on an identity.
@@ -1025,7 +1084,8 @@ class LocalUser(Identity):
                 "password_last_changed_at":  self.password_last_changed_at,
                 "user_type": self.user_type,
                 "tags": [tag.__dict__ for tag in self.tags],
-                "custom_properties": self.properties
+                "custom_properties": self.properties,
+                "owners": [owner.__dict__ for owner in self.owners],
                 }
 
         if self.unique_id:
@@ -1102,7 +1162,8 @@ class LocalGroup(Identity):
                 "created_at": self.created_at,
                 "groups": self.groups,
                 "tags": [tag.__dict__ for tag in self.tags],
-                "custom_properties": self.properties
+                "custom_properties": self.properties,
+                "owners": [owner.__dict__ for owner in self.owners],
                 }
         if self.unique_id:
             group["id"] = self.unique_id
@@ -1181,6 +1242,7 @@ class AccessCred(Identity):
         self.expires_at = ""
         self.last_used_at = ""
         self.can_expire: bool|None = None
+        self.owners = []
 
         return
 
@@ -1194,6 +1256,7 @@ class AccessCred(Identity):
                 "expires_at": self.expires_at,
                 "last_used_at": self.last_used_at,
                 "can_expire": self.can_expire,
+                "owners": [owner.__dict__ for owner in self.owners],
                 "tags": [tag.__dict__ for tag in self.tags],
                 "custom_properties": self.properties
                 }
@@ -1230,6 +1293,20 @@ class AccessCred(Identity):
 
         self.property_definitions.validate_property_name(property_name, entity_type="access_cred")
         self.properties[property_name] = property_value
+
+    def add_owner(self, external_id: str, owner_type: str, is_primary: bool = False) -> None:
+        """Add Entity Owner
+
+        Add an entity owner to the access credential.
+
+        Args:
+            external_id (str): IDP identity of the owner
+            owner_type (str): IDP Node type of the entity, `OAAOwnerType` enum. For Custom IDP owner_type should be `OAA.<IDPType>.IDPUser`
+            is_primary (bool, optional): Is Primary Owner. Defaults to False.
+        """
+        owner = EntityOwner(external_id=external_id, owner_type=owner_type, is_primary=is_primary)
+        if owner not in self.owners:
+            self.owners.append(owner)
 
 
 class LocalRole():
@@ -1274,6 +1351,7 @@ class LocalRole():
         self.properties = {}
         self.roles = []
         self.tags = []
+        self.owners = []
 
     def __str__(self) -> str:
         return f"Local Role - {self.name} ({self.unique_id})"
@@ -1322,6 +1400,20 @@ class LocalRole():
         if tag not in self.tags:
             self.tags.append(tag)
 
+    def add_owner(self, external_id: str, owner_type: str, is_primary: bool = False) -> None:
+        """Add Entity Owner
+
+        Add an entity owner to the local role.
+
+        Args:
+            external_id (str): IDP identity of the owner
+            owner_type (str): IDP Node type of the entity, `OAAOwnerType` enum. For Custom IDP owner_type should be `OAA.<IDPType>.IDPUser`
+            is_primary (bool, optional): Is Primary Owner. Defaults to False.
+        """
+        owner = EntityOwner(external_id=external_id, owner_type=owner_type, is_primary=is_primary)
+        if owner not in self.owners:
+            self.owners.append(owner)
+
     def set_property(self, property_name: str, property_value: any, ignore_none: bool = False) -> None:
         """ Set the value for custom property on a local role.
 
@@ -1368,10 +1460,11 @@ class LocalRole():
         response['roles'] = self.roles
         response['tags'] = [tag.__dict__ for tag in self.tags]
         response['custom_properties'] = self.properties
+        response['owners'] = [owner.__dict__ for owner in self.owners]
         if self.unique_id:
             response["id"] = self.unique_id
 
-        return response
+        return {k: v for k, v in response.items() if v not in [None, [], {}, ""]}
 
 
 class CustomPermission():
@@ -2575,6 +2668,24 @@ class Tag():
         else:
             return False
 
+class EntityOwner():
+
+    def __init__(self, external_id: str, owner_type: str, is_primary: bool = False) -> None:
+        self.external_id = external_id
+        self.owner_type = owner_type
+        self.primary = is_primary
+
+    def __str__(self) -> str:
+        return f"EntityOwner {self.owner_type}:{self.external_id}"
+
+    def __repr__(self) -> str:
+        return f"EntityOwner(external_id={self.external_id!r}, owner_type={self.owner_type!r}, is_primary={self.is_primary!r})"
+
+    def __eq__(self, o):
+        if self.external_id == o.external_id and self.owner_type == o.owner_type:
+            return True
+        else:
+            return False
 
 ###############################################################################
 # Human Resource Information Systems (HRIS)
