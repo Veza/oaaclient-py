@@ -76,6 +76,8 @@ def test_client_provider(veza_con):
         deleted = True
     elif deleted_provider["state"] == "DELETING":
         deleted = True
+    elif deleted_provider["state"] == "PENDING_DELETE":
+        deleted = True
     print(deleted_provider)
     assert deleted
 

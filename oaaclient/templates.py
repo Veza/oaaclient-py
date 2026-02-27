@@ -389,7 +389,7 @@ class CustomApplication(Application):
 
         if name in self.idp_identities:
             raise OAATemplateException(f"IdP Identity {name} already defined")
-        self.idp_identities[name] = IdPIdentity(name)
+        self.idp_identities[name] = IdPIdentity(name, property_definitions=self.property_definitions)
 
         return self.idp_identities[name]
 
@@ -1178,6 +1178,7 @@ class IdPIdentity(Identity):
 
     Args:
         name (str): Primary IdP identifier for identity (email, group name, etc)
+        property_definitions (ApplicationPropertyDefinitions, optional): Property definitions for role assignment validation
 
     Attributes:
         name (str): name of identity
@@ -1190,8 +1191,8 @@ class IdPIdentity(Identity):
         tags (list[Tag]): List of tags
     """
 
-    def __init__(self, name: str) -> None:
-        super().__init__(name, identity_type=OAAIdentityType.IdP)
+    def __init__(self, name: str, property_definitions: ApplicationPropertyDefinitions = None) -> None:
+        super().__init__(name, identity_type=OAAIdentityType.IdP, property_definitions=property_definitions)
 
     def __str__(self) -> str:
         return f"IdP Identity {self.name}"

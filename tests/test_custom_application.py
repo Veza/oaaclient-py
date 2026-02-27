@@ -205,6 +205,28 @@ def test_role_assignments():
     assert user.role_assignments["admin"]["apply_to_application"] is False
 
 
+def test_idp_identity_add_role_with_assignment_properties():
+    """IdP identities receive property_definitions so add_role(assignment_properties=...) works.
+
+    Previously IdPIdentity was created without property_definitions, causing AttributeError
+    when calling add_role(..., assignment_properties={...}) because validate_property_name
+    was called on None.
+    """
+    app = CustomApplication(name="testapp", application_type="pytest")
+    app.add_local_role("operator")
+    app.property_definitions.define_role_assignment_property("approver", OAAPropertyType.STRING)
+    idp = app.add_idp_identity("user@example.com")
+    idp.add_role("operator", apply_to_application=True, assignment_properties={"approver": "admin"})
+    payload = app.get_payload()
+    identity_to_permissions = payload["identity_to_permissions"]
+    idp_entries = [e for e in identity_to_permissions if e["identity"] == "user@example.com" and e["identity_type"] == "idp"]
+    assert len(idp_entries) == 1
+    role_assignments = idp_entries[0]["role_assignments"]
+    assert len(role_assignments) == 1
+    assert role_assignments[0]["role"] == "operator"
+    assert role_assignments[0].get("custom_properties") == {"approver": "admin"}
+
+
 def test_exceptions():
     custom_app = CustomApplication(name="testapp", application_type="pytest", description="This is a test")
 

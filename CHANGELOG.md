@@ -1,5 +1,8 @@
 # OAA Client Change Log
 
+## v1.1.16
+* Fixed issue where role assignments to IdP identities failed with `AttributeError` when using `assignment_properties`. IdP identities created via `CustomApplication.add_idp_identity()` now receive the application's property definitions so `add_role(..., assignment_properties={...})` works correctly.
+
 ## v1.1.15
 * **Early Access** Add support for setting Entity Owners for the Custom Application template. Entity owners can be set on the Application, Local User, Groups, Roles, Access Creds and Resources using the `add_owner` operation on the object.
   ```python
