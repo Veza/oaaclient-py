@@ -1,12 +1,12 @@
 """
-Copyright 2023 Veza Technologies Inc.
+Copyright 2026 Veza Technologies Inc.
 
 Use of this source code is governed by the MIT
 license that can be found in the LICENSE file or at
 https://opensource.org/licenses/MIT.
 """
+from collections.abc import MutableMapping
 
-from collections.abc import Mapping, MutableMapping
 
 class CaseInsensitiveDict(MutableMapping):
     """Case Insensitive Key Dictionary

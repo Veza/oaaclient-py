@@ -23,7 +23,7 @@ https://opensource.org/licenses/MIT.
 """
 
 from oaaclient.client import OAAClient, OAAClientError
-from oaaclient.templates import CustomApplication, OAAPermission
+from oaaclient.templates.application import CustomApplication, OAAPermission
 import os
 import sys
 

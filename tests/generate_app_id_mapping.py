@@ -181,6 +181,28 @@ def generate_app_id_mapping():
     access_cred_3 = app.add_access_cred("cred003", "Access Cred 003")
     access_cred_3.add_permission("Admin", apply_to_application=True)
 
+    # agents
+    app.property_definitions.define_local_agent_property("runtime", OAAPropertyType.STRING)
+
+    agent1 = app.add_agent(name="Data Agent", unique_id="agent-001", ai_platform="Azure", ai_agent_publisher="Contoso")
+    agent1.is_active = True
+    agent1.created_at = "2024-06-01T00:00:00.000Z"
+    agent1.add_group("g1")
+    agent1.add_access_cred("cred001")
+    agent1.set_property("runtime", "python3.11")
+    agent1.add_role("r1", apply_to_application=True)
+
+    # models
+    app.property_definitions.define_local_model_property("parameter_count", OAAPropertyType.NUMBER)
+
+    model1 = app.add_model(name="GPT-4", unique_id="model-001", ai_platform="OpenAI", ai_model_publisher="OpenAI", ai_model_family="GPT", ai_model_series="4")
+    model1.created_at = "2024-01-01T00:00:00.000Z"
+    model1.add_tag("env", "production")
+    model1.set_property("parameter_count", 175000000000)
+    model1.add_owner("admin@example.com", OAAOwnerType.OktaUser, is_primary=True)
+
+    agent1.add_model("model-001")
+
     return app
 
 def main():
@@ -239,6 +261,12 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
         "local_access_creds_properties": {
           "is_oauth": "BOOLEAN",
           "generation": "STRING"
+        },
+        "local_agent_properties": {
+          "runtime": "STRING"
+        },
+        "local_model_properties": {
+          "parameter_count": "NUMBER"
         },
         "resources": [
           {
@@ -469,6 +497,55 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
           "is_active": true
         }
       ],
+      "local_agents": [
+        {
+          "name": "Data Agent",
+          "ai_platform": "Azure",
+          "ai_agent_publisher": "Contoso",
+          "is_active": true,
+          "created_at": "2024-06-01T00:00:00.000Z",
+          "groups": [
+            "g1"
+          ],
+          "access_creds": [
+            "cred001"
+          ],
+          "models": [
+            "model-001"
+          ],
+          "custom_properties": {
+            "runtime": "python3.11"
+          },
+          "id": "agent-001"
+        }
+      ],
+      "local_models": [
+        {
+          "name": "GPT-4",
+          "ai_platform": "OpenAI",
+          "ai_model_publisher": "OpenAI",
+          "ai_model_family": "GPT",
+          "ai_model_series": "4",
+          "created_at": "2024-01-01T00:00:00.000Z",
+          "tags": [
+            {
+              "key": "env",
+              "value": "production"
+            }
+          ],
+          "custom_properties": {
+            "parameter_count": 175000000000
+          },
+          "owners": [
+            {
+              "external_id": "admin@example.com",
+              "owner_type": "oktauser",
+              "primary": true
+            }
+          ],
+          "id": "model-001"
+        }
+      ],
       "tags": [],
       "custom_properties": {
         "version": "2022.2.2"
@@ -669,6 +746,17 @@ GENERATED_APP_ID_MAPPINGS_PAYLOAD = """
         {
           "application": "pytest unique id app",
           "permission": "Admin",
+          "apply_to_application": true
+        }
+      ]
+    },
+    {
+      "identity": "agent-001",
+      "identity_type": "local_agent",
+      "role_assignments": [
+        {
+          "application": "pytest unique id app",
+          "role": "r1",
           "apply_to_application": true
         }
       ]

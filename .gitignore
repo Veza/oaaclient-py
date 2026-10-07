@@ -137,3 +137,6 @@ dmypy.json
 
 # Intellij working directory
 .idea/
+
+# UV Files
+uv.lock

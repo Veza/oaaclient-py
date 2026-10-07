@@ -931,6 +931,7 @@ def test_create_query(veza_con):
     assert e.value is not None
     assert e.value.status_code == 404
 
+@pytest.mark.skip(reason="Broken test EAC-69529")  # https://veza.atlassian.net/browse/EAC-69529
 @pytest.mark.skipif(not os.getenv("PYTEST_VEZA_HOST"), reason="Test host is not configured")
 def test_create_report(veza_con):
     """Test the methods for managing reports """

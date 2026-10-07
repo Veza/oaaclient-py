@@ -9,6 +9,7 @@ https://opensource.org/licenses/MIT.
 import pytest
 
 from generate_app import generate_app
+from generate_entity_enrichment import generate_entity_enrichment
 from generate_idp import generate_idp
 from generate_hris import generate_hris
 from oaaclient.templates import Tag
@@ -50,6 +51,14 @@ def test_custom_app_reprs() -> None:
     assert app.property_definitions.__str__() == "ApplicationPropertyDefinitions for pytest"
     assert app.property_definitions.__repr__() == "ApplicationPropertyDefinitions(application_type='pytest')"
 
+    agent1 = app.local_agents["support_bot"]
+    assert agent1.__str__() == "Local Agent - support_bot (None)"
+    assert agent1.__repr__() == "LocalAgent(name='support_bot', unique_id=None)"
+
+    model1 = app.local_models["gpt4"]
+    assert model1.__str__() == "Local Model - gpt4 (None)"
+    assert model1.__repr__() == "LocalModel(name='gpt4', unique_id=None)"
+
 def test_custom_idp_reprs() -> None:
 
     idp = generate_idp()
@@ -70,6 +79,19 @@ def test_custom_idp_reprs() -> None:
 
     assert idp.property_definitions.__str__() == "IdP Property Definitions"
     assert idp.property_definitions.__repr__() == "IdPPropertyDefinitions()"
+
+def test_entity_enrichment_repr() -> None:
+    enrichment = generate_entity_enrichment()
+
+    assert enrichment.__str__() == "EntityEnrichment Pytest Entity Enrichment"
+    assert enrichment.__repr__() == "EntityEnrichment(name='Pytest Entity Enrichment')"
+
+    entity = enrichment.get_entity("AwsIamRole", "arn:aws:iam::339083562601:role/Administrator", "339083562601:awsiam")
+    assert entity.__str__() == "EnrichedEntity - AwsIamRole (arn:aws:iam::339083562601:role/Administrator)"
+    assert entity.__repr__() == "EnrichedEntity(entity_type='AwsIamRole', id='arn:aws:iam::339083562601:role/Administrator', data_source_id='339083562601:awsiam')"
+
+    assert enrichment.property_definitions.__str__() == "EntityEnrichmentPropertyDefinitions"
+    assert enrichment.property_definitions.__repr__() == "EntityEnrichmentPropertyDefinitions()"
 
 def test_tag_repr() -> None:
 

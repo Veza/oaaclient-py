@@ -1,5 +1,68 @@
 # OAA Client Change Log
 
+## v1.2.0
+* OAAClient `templates` module has been refactored into sub modules to improve readability and maintainability. Backwards compatibility has been maintained for all existing imports.
+  * Template components can now be imported directly from sub-modules based on template or common purpose
+    * `oaaclient.templates.application`
+    * `oaaclient.templates.common`
+    * `oaaclient.templates.enrichment`
+    * `oaaclient.templates.exceptions`
+    * `oaaclient.templates.hris`
+    * `oaaclient.templates.idp`
+    * `oaaclient.templates.principal`
+    * `oaaclient.templates.secret_store`
+* Add support for AI entity types in the Custom Application Template: **Agents** and **Models**. Agents represent AI agent entities that can be assigned to groups, have access credentials, reference models, and be authorized via permissions or roles similar to local users. Models represent AI model entities that can be referenced by agents.
+  ```python
+  agent = app.add_agent(name="My Agent", unique_id="agent-001", ai_platform="OpenAI", ai_agent_publisher="Acme")
+  agent.is_active = True
+  agent.add_group("admin_group")
+  agent.add_access_cred("api_key_001")
+  agent.add_permission("read", resources=[resource1])
+  agent.add_role("viewer", apply_to_application=True)
+
+  model = app.add_model(name="GPT-4", unique_id="model-001", ai_platform="OpenAI", ai_model_publisher="OpenAI", ai_model_family="GPT", ai_model_series="4")
+  agent.add_model("model-001")
+  ```
+  * Custom properties can be defined for agents and models using `define_local_agent_property()` and `define_local_model_property()`.
+* Add support for the new Secret Store Submission Template `oaaclient.templates.secret_store`. Models secret store providers (vaults, secrets managers, credential stores) including permissions, vaults, vault entries, and identity-to-permission assignments.
+  ```python
+  from oaaclient.templates import OAAPermission, SecretStoreSubmission
+
+  provider = SecretStoreSubmission(name="Hashicorp Vault", secret_store_type="hashicorp_vault")
+  permission = provider.secret_store.add_permission(name="Read", unique_id="perm-read", permission_type=[OAAPermission.DataRead])
+
+  vault = provider.secret_store.add_vault(name="Prod Secrets", vault_type="general", unique_id="vault-01")
+  entry = vault.add_entry(name="db_password", unique_id="entry-01")
+  entry.add_identity(identity_type="OktaUser", external_id="svc_account@example.com")
+
+  identity = provider.secret_store.add_identity_to_permission(identity="svc_account", identity_type="local_user")
+  identity.add_permission_assignment(vault=[vault.id], permissions=[permission.id])
+  ```
+  * `SecretStorePermission` can be tagged with canonical `OAAPermission` types via `permission_type` on `add_permission()` or the `add_permission_type()` method.
+* Add support for the Custom Principals Template via the `oaaclient.templates.principal` module.
+  ```python
+  from oaaclient.templates.principal import CustomPrincipal
+  principal = CustomPrincipal("My Principal", principal_type="MyPrincipal", tenant_id="tenant01")
+  principal.add_user(
+        name="User Example",
+        unique_id="example0001",
+        email="user@example.com",
+        user_unique_id="user@example.com"
+    )
+  ```
+* Adds new classes for generating an Identity Mapping Configuration submission. Classes are located in `oaaclient.templates.common`
+* Add support for the Entity Enrichment Template via the `oaaclient.templates.enrichment` module. Attaches custom searchable properties to existing Veza entities (such as `AwsIamRole`, `AwsIamUser`, or `OktaUser`) discovered by other integrations, without creating new entities.
+  ```python
+  from oaaclient.templates.enrichment import EntityEnrichment
+  from oaaclient.templates import OAAPropertyType
+
+  enrichment = EntityEnrichment(name="My Enrichment")
+  enrichment.property_definitions.define_property(entity_type="AwsIamRole", name="corp_classification", property_type=OAAPropertyType.STRING)
+
+  entity = enrichment.add_entity(entity_type="AwsIamRole", id="arn:aws:iam::339083562601:role/example", data_source_id="339083562601:awsiam")
+  entity.set_property("corp_classification", "development")
+  ```
+
 ## v1.1.16
 * Fixed issue where role assignments to IdP identities failed with `AttributeError` when using `assignment_properties`. IdP identities created via `CustomApplication.add_idp_identity()` now receive the application's property definitions so `add_role(..., assignment_properties={...})` works correctly.
 

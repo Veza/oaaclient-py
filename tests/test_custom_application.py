@@ -10,7 +10,7 @@ import pytest
 import json
 import os
 
-from oaaclient.templates import CustomApplication, CustomPermission, OAAPermission, OAAIdentityType, OAATemplateException, Tag, OAAPropertyType
+from oaaclient.templates import CustomApplication, CustomPermission, OAAPermission, OAAIdentityType, OAATemplateException, Tag, OAAPropertyType, OAAOwnerType
 from generate_app import generate_app, GENERATED_APP_PAYLOAD
 from generate_app_id_mapping import generate_app_id_mapping, GENERATED_APP_ID_MAPPINGS_PAYLOAD
 
@@ -414,7 +414,236 @@ def test_custom_property_exceptions():
     with pytest.raises(OAATemplateException) as e:
         app.property_definitions.define_resource_property("thing", "invalide-name!", OAAPropertyType.STRING)
 
+    with pytest.raises(OAATemplateException) as e:
+        app.property_definitions.define_local_agent_property("invalide-name!", OAAPropertyType.STRING)
+
+    with pytest.raises(OAATemplateException) as e:
+        app.property_definitions.define_local_model_property("invalide-name!", OAAPropertyType.STRING)
+
+    # test agent/model set_property on undefined property
+    with pytest.raises(OAATemplateException):
+        app.local_agents["support_bot"].set_property("undefined_prop", "value")
+
+    with pytest.raises(OAATemplateException):
+        app.local_models["gpt4"].set_property("undefined_prop", "value")
+
     return
+
+
+def test_agents_and_models():
+    """Test creating agents and models, their methods, and payload serialization."""
+    app = CustomApplication(name="testapp", application_type="pytest", description="This is a test")
+    app.add_custom_permission("read", [OAAPermission.DataRead])
+    app.add_custom_permission("write", [OAAPermission.DataWrite])
+    admin_role = app.add_local_role("admin", ["read", "write"])
+
+    # create a group and access cred for agent associations
+    app.add_local_group("ai_group")
+    app.add_access_cred("api_key_001", "API Key 001")
+
+    # create a model
+    model = app.add_model(
+        name="GPT-4",
+        unique_id="gpt4",
+        ai_platform="OpenAI",
+        ai_model_publisher="OpenAI",
+        ai_model_family="GPT",
+        ai_model_series="4",
+    )
+    model.created_at = "2024-01-01T00:00:00.000Z"
+    model.add_tag("env", "production")
+    model.add_tag("env", "production")  # test deduplication
+    model.add_owner("admin@example.com", OAAOwnerType.OktaUser, is_primary=True)
+
+    # create an agent
+    agent = app.add_agent(
+        name="Support Bot",
+        unique_id="bot-001",
+        ai_platform="OpenAI",
+        ai_agent_publisher="Acme Corp",
+    )
+    agent.is_active = True
+    agent.created_at = "2024-06-01T00:00:00.000Z"
+    agent.add_group("ai_group")
+    agent.add_group("ai_group")  # test deduplication
+    agent.add_access_cred("api_key_001")
+    agent.add_access_cred("api_key_001")  # test deduplication
+    agent.add_model("gpt4")
+    agent.add_model("gpt4")  # test deduplication
+    agent.add_tag("team", "support")
+
+    # create an agent by name only (no unique_id)
+    agent2 = app.add_agent(name="Simple Agent")
+    assert agent2.unique_id is None
+
+    # add resource and assign permissions/roles to agent
+    resource1 = app.add_resource("resource1", "rtype1", "First resource")
+    agent.add_permission("read", [resource1])
+    agent.add_role("admin", apply_to_application=True)
+
+    # serialize and validate
+    payload = app.get_payload()
+    app_payload = payload["applications"][0]
+
+    # validate agents in payload
+    assert len(app_payload["local_agents"]) == 2
+    bot_payload = None
+    for a in app_payload["local_agents"]:
+        if a.get("id") == "bot-001":
+            bot_payload = a
+            break
+    assert bot_payload is not None
+    assert bot_payload["name"] == "Support Bot"
+    assert bot_payload["ai_platform"] == "OpenAI"
+    assert bot_payload["ai_agent_publisher"] == "Acme Corp"
+    assert bot_payload["is_active"] is True
+    assert bot_payload["created_at"] == "2024-06-01T00:00:00.000Z"
+    assert bot_payload["groups"] == ["ai_group"]
+    assert bot_payload["access_creds"] == ["api_key_001"]
+    assert bot_payload["models"] == ["gpt4"]
+    assert len(bot_payload["tags"]) == 1
+    assert {"key": "team", "value": "support"} in bot_payload["tags"]
+
+    # validate models in payload
+    assert len(app_payload["local_models"]) == 1
+    model_payload = app_payload["local_models"][0]
+    assert model_payload["name"] == "GPT-4"
+    assert model_payload["id"] == "gpt4"
+    assert model_payload["ai_platform"] == "OpenAI"
+    assert model_payload["ai_model_publisher"] == "OpenAI"
+    assert model_payload["ai_model_family"] == "GPT"
+    assert model_payload["ai_model_series"] == "4"
+    assert model_payload["created_at"] == "2024-01-01T00:00:00.000Z"
+    assert len(model_payload["tags"]) == 1
+    assert {"key": "env", "value": "production"} in model_payload["tags"]
+    assert len(model_payload["owners"]) == 1
+
+    # validate agent appears in identity_to_permissions
+    identity_to_permissions = payload["identity_to_permissions"]
+    matches = [e for e in identity_to_permissions if e["identity"] == "bot-001"]
+    assert len(matches) == 1
+    agent_perms = matches[0]
+    assert agent_perms["identity_type"] == "local_agent"
+    assert "application_permissions" in agent_perms or "role_assignments" in agent_perms
+
+    # validate whole payload serializes to JSON
+    assert json.dumps(payload)
+
+
+def test_agent_model_exceptions():
+    """Test duplicate agent/model creation raises exceptions."""
+    app = CustomApplication(name="testapp", application_type="pytest", description="test")
+
+    app.add_agent(name="agent1", unique_id="a001")
+    with pytest.raises(OAATemplateException) as e:
+        app.add_agent(name="agent1 duplicate", unique_id="a001")
+    assert "a001" in e.value.message
+
+    # duplicate by name when no unique_id
+    app.add_agent(name="agent_by_name")
+    with pytest.raises(OAATemplateException) as e:
+        app.add_agent(name="agent_by_name")
+    assert "agent_by_name" in e.value.message
+
+    app.add_model(name="model1", unique_id="m001")
+    with pytest.raises(OAATemplateException) as e:
+        app.add_model(name="model1 duplicate", unique_id="m001")
+    assert "m001" in e.value.message
+
+    app.add_model(name="model_by_name")
+    with pytest.raises(OAATemplateException) as e:
+        app.add_model(name="model_by_name")
+    assert "model_by_name" in e.value.message
+
+
+def test_agent_model_custom_properties():
+    """Test custom property definitions and setting for agents and models."""
+    app = CustomApplication(name="testapp", application_type="pytest", description="test")
+
+    # define properties
+    app.property_definitions.define_local_agent_property("version", OAAPropertyType.STRING)
+    app.property_definitions.define_local_agent_property("priority", OAAPropertyType.NUMBER)
+    app.property_definitions.define_local_model_property("parameter_count", OAAPropertyType.NUMBER)
+    app.property_definitions.define_local_model_property("license", OAAPropertyType.STRING)
+
+    agent = app.add_agent(name="agent1")
+    agent.set_property("version", "2.0")
+    agent.set_property("priority", 1)
+    agent.set_property("priority", None, ignore_none=True)  # should not overwrite
+    assert agent.properties["priority"] == 1
+
+    model = app.add_model(name="model1")
+    model.set_property("parameter_count", 175000000000)
+    model.set_property("license", "MIT")
+
+    # verify in payload
+    payload = app.get_payload()
+    app_payload = payload["applications"][0]
+
+    agent_payload = app_payload["local_agents"][0]
+    assert agent_payload["custom_properties"]["version"] == "2.0"
+    assert agent_payload["custom_properties"]["priority"] == 1
+
+    model_payload = app_payload["local_models"][0]
+    assert model_payload["custom_properties"]["parameter_count"] == 175000000000
+    assert model_payload["custom_properties"]["license"] == "MIT"
+
+    # verify property definitions in payload
+    prop_def = payload["custom_property_definition"]["applications"][0]
+    assert "local_agent_properties" in prop_def
+    assert prop_def["local_agent_properties"]["version"] == "STRING"
+    assert prop_def["local_agent_properties"]["priority"] == "NUMBER"
+    assert "local_model_properties" in prop_def
+    assert prop_def["local_model_properties"]["parameter_count"] == "NUMBER"
+    assert prop_def["local_model_properties"]["license"] == "STRING"
+
+
+def test_agent_model_property_exceptions():
+    """Test that setting undefined properties raises exceptions."""
+    app = CustomApplication(name="testapp", application_type="pytest", description="test")
+
+    agent = app.add_agent(name="agent1")
+    with pytest.raises(OAATemplateException):
+        agent.set_property("undefined_prop", "value")
+
+    model = app.add_model(name="model1")
+    with pytest.raises(OAATemplateException):
+        model.set_property("undefined_prop", "value")
+
+    # invalid property names
+    with pytest.raises(OAATemplateException):
+        app.property_definitions.define_local_agent_property("invalid-name!", OAAPropertyType.STRING)
+
+    with pytest.raises(OAATemplateException):
+        app.property_definitions.define_local_model_property("invalid-name!", OAAPropertyType.STRING)
+
+
+def test_model_empty_fields_omitted():
+    """Test that empty/default fields are omitted from model to_dict output."""
+    app = CustomApplication(name="testapp", application_type="pytest", description="test")
+    model = app.add_model(name="minimal_model")
+    model_dict = model.to_dict()
+
+    assert "name" in model_dict
+    assert "ai_platform" not in model_dict  # empty string omitted
+    assert "tags" not in model_dict  # empty list omitted
+    assert "id" not in model_dict  # no unique_id
+
+
+def test_agent_empty_fields_omitted():
+    """Test that empty/default fields are omitted from agent to_dict output."""
+    app = CustomApplication(name="testapp", application_type="pytest", description="test")
+    agent = app.add_agent(name="minimal_agent")
+    agent_dict = agent.to_dict()
+
+    assert "name" in agent_dict
+    assert "ai_platform" not in agent_dict
+    assert "groups" not in agent_dict
+    assert "access_creds" not in agent_dict
+    assert "models" not in agent_dict
+    assert "is_active" not in agent_dict
+    assert "id" not in agent_dict
+
 
 # Test Payloads
 CUSTOM_PROPERTIES_PAYLOAD = """
@@ -488,6 +717,8 @@ CUSTOM_PROPERTIES_PAYLOAD = """
         }
       ],
       "local_access_creds": [],
+      "local_agents": [],
+      "local_models": [],
       "tags": [],
       "custom_properties": {
         "contact": "billy",

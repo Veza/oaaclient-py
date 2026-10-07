@@ -17,6 +17,7 @@ from generate_app import generate_app
 from generate_app_id_mapping import generate_app_id_mapping
 from generate_hris import generate_hris
 from generate_idp import generate_idp
+from generate_secret_store import generate_secret_store
 
 import oaaclient.utils as utils
 from oaaclient.client import OAAClient, OAAClientError
@@ -50,7 +51,7 @@ def test_payload_push(veza_con, app_provider):
     assert "warnings" in response
     # since our payload includes fake identities expect warnings about not matching identities
     assert response["warnings"] is not None
-    assert len(response["warnings"]) == 6
+    assert len(response["warnings"]) == 7
     for warning in response["warnings"]:
         if "Role is missing permission" in warning.get("message", ""):
             pass
@@ -93,7 +94,7 @@ def test_payload_push_compressed(veza_con, app_provider):
     assert "warnings" in response
     # since our payload includes fake identities expect warnings about not matching identities
     assert response["warnings"] is not None
-    assert len(response["warnings"]) == 6
+    assert len(response["warnings"]) == 7
     for warning in response["warnings"]:
         if "Role is missing permission" in warning.get("message", ""):
             pass
@@ -165,7 +166,8 @@ def test_payload_push_id_mapping(veza_con, app_provider):
     assert "warnings" in response
     # since our payload includes fake identities expect warnings about not matching identities
     assert response["warnings"] is not None
-    for warning in response["warnings"]:
+    # first and last warning message are generic, ensure than no un-expected warnings are returned
+    for warning in response["warnings"][1:-1]:
         assert warning['message'].startswith("Cannot find identity by names")
 
     data_source = veza_con.get_data_source(data_source_name, provider_id=app_provider["id"])
@@ -283,6 +285,37 @@ def test_api_multipart_push(veza_con, app_provider):
 
     while True:
         data_source = veza_con.get_data_source(data_source_name, provider_id=app_provider["id"])
+        if data_source["status"] == "SUCCESS":
+            break
+        elif FAILURE_REGEX.match(data_source["status"]):
+            print(data_source)
+            assert False, "Datasource parsing failure"
+        else:
+            time.sleep(4)
+
+
+@pytest.mark.skipif(not os.getenv("PYTEST_VEZA_HOST"), reason="Test host is not configured")
+@pytest.mark.timeout(TEST_TIMEOUT)
+def test_secret_store_payload_push(veza_con, secret_store_provider):
+
+    secret_store = generate_secret_store()
+
+    data_source_name = os.environ.get('PYTEST_CURRENT_TEST').replace("/", "-")
+    response = veza_con.push_application(secret_store_provider['name'],
+                                           data_source_name=data_source_name,
+                                           application_object=secret_store
+                                           )
+    if not response:
+        assert False
+
+    # print out any warnings from the push for debugging purposes, warnings are not a failure
+    if response.get("warnings", None):
+        print("Push warnings:")
+        for e in response["warnings"]:
+            print(f"  - {e}")
+
+    while True:
+        data_source = veza_con.get_data_source(data_source_name, provider_id=secret_store_provider["id"])
         if data_source["status"] == "SUCCESS":
             break
         elif FAILURE_REGEX.match(data_source["status"]):

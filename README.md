@@ -26,7 +26,7 @@ Create the Veza API connection and a new custom application:
 
 ```python
 from oaaclient.client import OAAClient
-from oaaclient.templates import CustomApplication, OAAPermission
+from oaaclient.templates.application import CustomApplication, OAAPermission
 
 # creates a connection class to communicate with Veza
 veza_con = OAAClient(url=veza_url, token=veza_api_key)
@@ -42,6 +42,22 @@ custom_app.add_custom_permission("owner", [OAAPermission.DataRead, OAAPermission
 jane = custom_app.add_local_user("jane", identities="jane@example.com")
 resource1 = custom_app.add_resource(name="Resource 1", resource_type="thing")
 jane.add_permission(permission="owner", resources=[resource1])
+```
+
+#### AI Entities (Agents and Models)
+
+The SDK supports AI entity types for modeling non-human AI identities:
+
+```python
+# Create an AI model
+model = custom_app.add_model(name="GPT-4", unique_id="gpt4", ai_platform="OpenAI", ai_model_publisher="OpenAI")
+
+# Create an AI agent that references the model
+agent = custom_app.add_agent(name="Support Bot", unique_id="bot-001", ai_platform="OpenAI")
+agent.is_active = True
+agent.add_model("gpt4")
+agent.add_group("service_agents")
+agent.add_permission("read", resources=[resource1])
 ```
 
 Once all identities, permissions and resources are modeled, the client connection handles the final push to Veza:

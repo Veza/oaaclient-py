@@ -78,3 +78,22 @@ def hris_provider(veza_con):
     yield provider
 
     veza_con.delete_provider(provider["id"])
+
+@pytest.fixture(scope="module")
+def secret_store_provider(veza_con):
+    """Secret Store Provider
+
+    Yields a secret store provider that can be used for any test that pushes to a secret store,
+    deletes the provider after yield
+
+    Args:
+        veza_con: OAAClient connection fixture
+
+    Yields:
+        dict: Provider object
+    """
+    provider_name = f"Pytest Secret Store {uuid.uuid4()}"
+    provider = veza_con.create_provider(provider_name, "secret_store")
+    yield provider
+
+    veza_con.delete_provider(provider["id"])

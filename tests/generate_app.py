@@ -10,7 +10,7 @@ import logging
 import sys
 
 from oaaclient.client import OAAClient, OAAClientError
-from oaaclient.templates import CustomApplication, Tag, OAAPermission, OAAPropertyType, LocalUserType
+from oaaclient.templates import CustomApplication, Tag, OAAPermission, OAAPropertyType, LocalUserType, OAAOwnerType
 
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(thread)d %(message)s', level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -174,6 +174,28 @@ def generate_app():
 
     app.idp_identities["user01@example.com"].add_role("role1", apply_to_application=True)
 
+    # agents
+    app.property_definitions.define_local_agent_property("runtime", OAAPropertyType.STRING)
+
+    agent1 = app.add_agent(name="support_bot", ai_platform="OpenAI", ai_agent_publisher="Acme")
+    agent1.is_active = True
+    agent1.created_at = "2024-06-01T00:00:00.000Z"
+    agent1.add_group("group1")
+    agent1.add_tag("team", "support")
+    agent1.set_property("runtime", "python3.11")
+    agent1.add_role("role2", apply_to_application=True)
+
+    # models
+    app.property_definitions.define_local_model_property("parameter_count", OAAPropertyType.NUMBER)
+
+    model1 = app.add_model(name="gpt4", ai_platform="OpenAI", ai_model_publisher="OpenAI", ai_model_family="GPT", ai_model_series="4")
+    model1.created_at = "2024-01-01T00:00:00.000Z"
+    model1.add_tag("env", "production")
+    model1.set_property("parameter_count", 175000000000)
+    model1.add_owner("admin@example.com", OAAOwnerType.OktaUser, is_primary=True)
+
+    agent1.add_model("gpt4")
+
     return app
 
 def main():
@@ -235,6 +257,12 @@ GENERATED_APP_PAYLOAD = """
         "role_assignment_properties": {
           "approved": "BOOLEAN",
           "approver": "STRING"
+        },
+        "local_agent_properties": {
+          "runtime": "STRING"
+        },
+        "local_model_properties": {
+          "parameter_count": "NUMBER"
         },
         "resources": [
           {
@@ -433,6 +461,56 @@ GENERATED_APP_PAYLOAD = """
         }
       ],
       "local_access_creds": [],
+      "local_agents": [
+        {
+          "name": "support_bot",
+          "ai_platform": "OpenAI",
+          "ai_agent_publisher": "Acme",
+          "is_active": true,
+          "created_at": "2024-06-01T00:00:00.000Z",
+          "groups": [
+            "group1"
+          ],
+          "models": [
+            "gpt4"
+          ],
+          "tags": [
+            {
+              "key": "team",
+              "value": "support"
+            }
+          ],
+          "custom_properties": {
+            "runtime": "python3.11"
+          }
+        }
+      ],
+      "local_models": [
+        {
+          "name": "gpt4",
+          "ai_platform": "OpenAI",
+          "ai_model_publisher": "OpenAI",
+          "ai_model_family": "GPT",
+          "ai_model_series": "4",
+          "created_at": "2024-01-01T00:00:00.000Z",
+          "tags": [
+            {
+              "key": "env",
+              "value": "production"
+            }
+          ],
+          "custom_properties": {
+            "parameter_count": 175000000000
+          },
+          "owners": [
+            {
+              "external_id": "admin@example.com",
+              "owner_type": "oktauser",
+              "primary": true
+            }
+          ]
+        }
+      ],
       "tags": [],
       "custom_properties": {
         "version": "2022.2.2"
@@ -638,6 +716,17 @@ GENERATED_APP_PAYLOAD = """
         {
           "application": "pytest generated app",
           "role": "role1",
+          "apply_to_application": true
+        }
+      ]
+    },
+    {
+      "identity": "support_bot",
+      "identity_type": "local_agent",
+      "role_assignments": [
+        {
+          "application": "pytest generated app",
+          "role": "role2",
           "apply_to_application": true
         }
       ]

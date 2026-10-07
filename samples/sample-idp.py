@@ -24,7 +24,8 @@ https://opensource.org/licenses/MIT.
 """
 
 from oaaclient.client import OAAClient, OAAClientError
-from oaaclient.templates import CustomIdPProvider, OAAPropertyType
+from oaaclient.templates.idp import CustomIdPProvider
+from oaaclient.templates.common import OAAPropertyType
 import os
 import sys
 

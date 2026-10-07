@@ -1,8 +1,7 @@
 """
+Classes for constructing an OAA JSON payload for Custom Application
 
-Classes for constructing an OAA JSON payload (Custom "Application" or "IdP").
-
-Copyright 2022 Veza Technologies Inc.
+Copyright 2026 Veza Technologies Inc.
 
 Use of this source code is governed by the MIT
 license that can be found in the LICENSE file or at
@@ -11,25 +10,16 @@ https://opensource.org/licenses/MIT.
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 from enum import Enum
 from typing import List, Optional
 
-from .structures import CaseInsensitiveDict
-
-PROPERTY_NAME_REGEX=r"^[a-z][a-z_]*$"
+from .common import CaseInsensitiveDict, append_helper, unique_strs
+from .exceptions import OAATemplateException
+from .common import Tag, EntityOwner, OAAPropertyType, PROPERTY_NAME_REGEX
 
 log = logging.getLogger(__name__)
-
-
-class OAATemplateException(Exception):
-    """ General exception used for violations of the template schema. """
-
-    def __init__(self, message):
-        self.message = message
-        super().__init__(self.message)
 
 
 class OAAPermission(str, Enum):
@@ -58,28 +48,10 @@ class OAAIdentityType(str, Enum):
     LocalRole = "local_role"
     IdP = "idp"
     AccessCred = "local_access_creds"
+    LocalAgent = "local_agent"
 
     def __repr__(self) -> str:
         return f'{self.__class__.__name__}.{self.name}'
-
-class OAAOwnerType(str, Enum):
-    """ Node types for entity owners """
-    ActiveDirectoryUser = "activedirectoryuser"
-    AzureADUser = "azureaduser"
-    GoogleWorkspaceUser = "googleworkspaceuser"
-    OktaUser = "oktauser"
-
-    def __repr__(self) -> str:
-        return f'{self.__class__.__name__}.{self.name}'
-
-class Provider():
-    """Base class for CustomProvider. """
-    def __init__(self, name, custom_template):
-        self.name = name
-        self.custom_template = custom_template
-
-    def serialize(self):
-        return json.dumps({"name": self.name, "custom_template": self.custom_template})
 
 
 class Application():
@@ -132,6 +104,8 @@ class CustomApplication(Application):
         self.local_roles = CaseInsensitiveDict()
         self.idp_identities = CaseInsensitiveDict()
         self.access_creds = CaseInsensitiveDict()
+        self.local_agents = CaseInsensitiveDict()
+        self.local_models = CaseInsensitiveDict()
         self.resources = CaseInsensitiveDict()
         self.tags = []
         self.property_definitions = ApplicationPropertyDefinitions(application_type)
@@ -175,6 +149,8 @@ class CustomApplication(Application):
                 "local_groups": [group.to_dict() for group in self.local_groups.values()],
                 "local_roles": [role.to_dict() for role in self.local_roles.values()],
                 "local_access_creds": [cred.to_dict() for cred in self.access_creds.values()],
+                "local_agents": [agent.to_dict() for agent in self.local_agents.values()],
+                "local_models": [model.to_dict() for model in self.local_models.values()],
                 "tags": [tag.__dict__ for tag in self.tags],
                 "custom_properties": self.properties
                 }
@@ -418,6 +394,83 @@ class CustomApplication(Application):
 
         return self.access_creds[unique_id]
 
+    def add_agent(self, name: str, unique_id: str = None, ai_platform: str = "", ai_agent_publisher: str = "") -> LocalAgent:
+        """Create a new local agent for the application.
+
+        Agents represent AI agent entities. They can be assigned to groups, have access credentials,
+        reference models, and be authorized via permissions or roles similar to local users.
+
+        Args:
+            name (str): Display name for agent
+            unique_id (str, optional): Unique identifier for agent for reference by ID
+            ai_platform (str, optional): AI platform the agent runs on. Defaults to "".
+            ai_agent_publisher (str, optional): Publisher of the AI agent. Defaults to "".
+
+        Raises:
+            OAATemplateException: Agent with identifier already exists
+
+        Returns:
+            LocalAgent
+        """
+
+        if unique_id:
+            identifier = unique_id
+        else:
+            identifier = name
+
+        if identifier in self.local_agents:
+            raise OAATemplateException(f"Local agent identified by {identifier} already exists")
+
+        self.local_agents[identifier] = LocalAgent(
+            name=name,
+            unique_id=unique_id,
+            ai_platform=ai_platform,
+            ai_agent_publisher=ai_agent_publisher,
+            property_definitions=self.property_definitions,
+        )
+
+        return self.local_agents[identifier]
+
+    def add_model(self, name: str, unique_id: str = None, ai_platform: str = "", ai_model_publisher: str = "", ai_model_family: str = "", ai_model_series: str = "") -> LocalModel:
+        """Create a new local model for the application.
+
+        Models represent AI model entities. They can be referenced by agents.
+
+        Args:
+            name (str): Display name for model
+            unique_id (str, optional): Unique identifier for model for reference by ID
+            ai_platform (str, optional): AI platform the model runs on. Defaults to "".
+            ai_model_publisher (str, optional): Publisher of the AI model. Defaults to "".
+            ai_model_family (str, optional): Model family. Defaults to "".
+            ai_model_series (str, optional): Model series. Defaults to "".
+
+        Raises:
+            OAATemplateException: Model with identifier already exists
+
+        Returns:
+            LocalModel
+        """
+
+        if unique_id:
+            identifier = unique_id
+        else:
+            identifier = name
+
+        if identifier in self.local_models:
+            raise OAATemplateException(f"Local model identified by {identifier} already exists")
+
+        self.local_models[identifier] = LocalModel(
+            name=name,
+            unique_id=unique_id,
+            ai_platform=ai_platform,
+            ai_model_publisher=ai_model_publisher,
+            ai_model_family=ai_model_family,
+            ai_model_series=ai_model_series,
+            property_definitions=self.property_definitions,
+        )
+
+        return self.local_models[identifier]
+
     def add_tag(self, key: str, value: str = "") -> None:
         """ Add a tag to the Application
 
@@ -521,6 +574,7 @@ class CustomApplication(Application):
         identities.extend(self.local_groups.values())
         identities.extend(self.idp_identities.values())
         identities.extend(self.access_creds.values())
+        identities.extend(self.local_agents.values())
         for identity in identities:
             entry = identity.get_identity_to_permissions(application_name=self.name)
             if "application_permissions" in entry or "role_assignments" in entry:
@@ -1310,6 +1364,242 @@ class AccessCred(Identity):
             self.owners.append(owner)
 
 
+class LocalAgent(Identity):
+    """Local Agent identity, derived from Identity base class.
+
+    Represents an AI agent entity within an application. Agents can be assigned to groups,
+    have access credentials, reference models, and be authorized via permissions or roles.
+
+    Args:
+        name (str): Display name for agent
+        unique_id (str, optional): Unique identifier for agent for reference by ID
+        ai_platform (str, optional): AI platform the agent runs on
+        ai_agent_publisher (str, optional): Publisher of the AI agent
+        property_definitions (ApplicationPropertyDefinitions, optional): Property definitions for the application
+
+    Attributes:
+        name (str): Display name
+        unique_id (str): Unique identifier if provided
+        ai_platform (str): AI platform
+        ai_agent_publisher (str): AI agent publisher
+        is_active (bool): Whether agent is active, defaults to None for unset
+        created_at (str): RFC3339 timestamp for agent creation
+        groups (list): List of group names the agent belongs to
+        access_creds (list): List of access credential IDs associated with the agent
+        models (list): List of model names/IDs the agent uses
+        tags (list[Tag]): List of tags
+        owners (list[EntityOwner]): List of entity owners
+        properties (dict): Custom properties
+    """
+
+    def __init__(self, name: str, unique_id: str = None, ai_platform: str = "", ai_agent_publisher: str = "", property_definitions: ApplicationPropertyDefinitions = None) -> None:
+        super().__init__(name, identity_type=OAAIdentityType.LocalAgent, unique_id=unique_id, property_definitions=property_definitions)
+        self.ai_platform = ai_platform
+        self.ai_agent_publisher = ai_agent_publisher
+        self.is_active = None
+        self.created_at = None
+        self.groups = []
+        self.access_creds = []
+        self.models = []
+
+    def __str__(self) -> str:
+        return f"Local Agent - {self.name} ({self.unique_id})"
+
+    def __repr__(self) -> str:
+        return f"LocalAgent(name={self.name!r}, unique_id={self.unique_id!r})"
+
+    def add_group(self, group: str) -> None:
+        """Add agent to local group (group must be created separately).
+
+        Args:
+            group (str): identifier of local group
+        """
+        group = str(group)
+        if group not in self.groups:
+            self.groups.append(group)
+
+    def add_access_cred(self, access_cred: str) -> None:
+        """Add access cred to agent (access cred must be created separately).
+
+        Args:
+            access_cred (str): unique identifier of access cred
+        """
+        access_cred = str(access_cred)
+        if access_cred not in self.access_creds:
+            self.access_creds.append(access_cred)
+
+    def add_model(self, model: str) -> None:
+        """Add a model reference to agent (model must be created separately).
+
+        Args:
+            model (str): identifier of local model
+        """
+        model = str(model)
+        if model not in self.models:
+            self.models.append(model)
+
+    def to_dict(self) -> dict:
+        """Output agent to dictionary for payload."""
+
+        agent = {
+            "name": self.name,
+            "ai_platform": self.ai_platform,
+            "ai_agent_publisher": self.ai_agent_publisher,
+            "is_active": self.is_active,
+            "created_at": self.created_at,
+            "groups": self.groups,
+            "access_creds": self.access_creds,
+            "models": self.models,
+            "tags": [tag.__dict__ for tag in self.tags],
+            "custom_properties": self.properties,
+            "owners": [owner.__dict__ for owner in self.owners],
+        }
+
+        if self.unique_id:
+            agent["id"] = self.unique_id
+
+        return {k: v for k, v in agent.items() if v not in [None, [], {}, ""]}
+
+    def set_property(self, property_name: str, property_value: any, ignore_none: bool = False) -> None:
+        """Set a custom defined property on an agent.
+
+        Property name must be defined for agents before calling `set_property()`.
+
+        Args:
+            property_name (str): Name of property to set value for
+            property_value (Any): Value for property, type should match `OAAPropertyType` for property definition
+            ignore_none (bool, optional): Do not set property if value is None. Defaults to False.
+
+        Raises:
+            OAATemplateException: If property with `property_name` is not defined.
+        """
+        if not self.property_definitions:
+            raise OAATemplateException("No custom property definitions found for entity")
+
+        if ignore_none and property_value is None:
+            return
+
+        self.property_definitions.validate_property_name(property_name, entity_type="local_agent")
+        self.properties[property_name] = property_value
+
+
+class LocalModel():
+    """Represents an AI model entity within an application.
+
+    Models can be referenced by agents and have custom properties, tags, and owners.
+
+    Args:
+        name (str): Display name for model
+        unique_id (str, optional): Unique identifier for model for reference by ID
+        ai_platform (str, optional): AI platform the model runs on
+        ai_model_publisher (str, optional): Publisher of the AI model
+        ai_model_family (str, optional): Model family
+        ai_model_series (str, optional): Model series
+        property_definitions (ApplicationPropertyDefinitions, optional): Property definitions for the application
+
+    Attributes:
+        name (str): Display name
+        unique_id (str): Unique identifier if provided
+        ai_platform (str): AI platform
+        ai_model_publisher (str): AI model publisher
+        ai_model_family (str): AI model family
+        ai_model_series (str): AI model series
+        created_at (str): RFC3339 timestamp for model creation
+        tags (list[Tag]): List of tags
+        owners (list[EntityOwner]): List of entity owners
+        properties (dict): Custom properties
+    """
+
+    def __init__(self, name: str, unique_id: str = None, ai_platform: str = "", ai_model_publisher: str = "", ai_model_family: str = "", ai_model_series: str = "", property_definitions: ApplicationPropertyDefinitions = None) -> None:
+        self.name = name
+        if unique_id:
+            self.unique_id = str(unique_id)
+        else:
+            self.unique_id = None
+        self.ai_platform = ai_platform
+        self.ai_model_publisher = ai_model_publisher
+        self.ai_model_family = ai_model_family
+        self.ai_model_series = ai_model_series
+        self.created_at = None
+        self.property_definitions = property_definitions
+        self.properties = {}
+        self.tags = []
+        self.owners = []
+
+    def __str__(self) -> str:
+        return f"Local Model - {self.name} ({self.unique_id})"
+
+    def __repr__(self) -> str:
+        return f"LocalModel(name={self.name!r}, unique_id={self.unique_id!r})"
+
+    def to_dict(self) -> dict:
+        """Output model to dictionary for payload."""
+
+        model = {
+            "name": self.name,
+            "ai_platform": self.ai_platform,
+            "ai_model_publisher": self.ai_model_publisher,
+            "ai_model_family": self.ai_model_family,
+            "ai_model_series": self.ai_model_series,
+            "created_at": self.created_at,
+            "tags": [tag.__dict__ for tag in self.tags],
+            "custom_properties": self.properties,
+            "owners": [owner.__dict__ for owner in self.owners],
+        }
+
+        if self.unique_id:
+            model["id"] = self.unique_id
+
+        return {k: v for k, v in model.items() if v not in [None, [], {}, ""]}
+
+    def add_tag(self, key: str, value: str = "") -> None:
+        """Add a new tag to model.
+
+        Args:
+            key (str): Key for tag, aka name. Must be present and must be letters, numbers or _ (underscore) only.
+            value (str, optional): Value for Tag, will appear in Veza as `key:value`. Defaults to "".
+        """
+        tag = Tag(key=key, value=value)
+        if tag not in self.tags:
+            self.tags.append(tag)
+
+    def set_property(self, property_name: str, property_value: any, ignore_none: bool = False) -> None:
+        """Set a custom defined property on a model.
+
+        Property name must be defined for models before calling `set_property()`.
+
+        Args:
+            property_name (str): Name of property to set value for
+            property_value (Any): Value for property, type should match `OAAPropertyType` for property definition
+            ignore_none (bool, optional): Do not set property if value is None. Defaults to False.
+
+        Raises:
+            OAATemplateException: If property with `property_name` is not defined.
+        """
+        if not self.property_definitions:
+            raise OAATemplateException("No custom property definitions found for entity")
+
+        if ignore_none and property_value is None:
+            return
+
+        self.property_definitions.validate_property_name(property_name, entity_type="local_model")
+        self.properties[property_name] = property_value
+
+    def add_owner(self, external_id: str, owner_type: str, is_primary: bool = False) -> None:
+        """Add Entity Owner
+
+        Add an entity owner to the model.
+
+        Args:
+            external_id (str): IDP identity of the owner
+            owner_type (str): IDP Node type of the entity, `OAAOwnerType` enum. For Custom IDP owner_type should be `OAA.<IDPType>.IDPUser`
+            is_primary (bool, optional): Is Primary Owner. Defaults to False.
+        """
+        owner = EntityOwner(external_id=external_id, owner_type=owner_type, is_primary=is_primary)
+        if owner not in self.owners:
+            self.owners.append(owner)
+
+
 class LocalRole():
     """Represent a Custom Application Local Role.
 
@@ -1551,19 +1841,9 @@ class CustomPermission():
 
         self.permission_type = validated_permissions
 
-
 ###############################################################################
 # Custom properties related classes
 ###############################################################################
-class OAAPropertyType(str, Enum):
-    """ Supported types for custom properties on OAA entities such as application, resource, and identity.  """
-
-    BOOLEAN = "BOOLEAN"                 # True/False boolean
-    NUMBER = "NUMBER"                   # integer number
-    STRING = "STRING"                   # string
-    STRING_LIST = "STRING_LIST"         # list of strings
-    TIMESTAMP = "TIMESTAMP"             # RFC3339 formatted time stamp 2022-02-08T13:10:50.25Z
-
 
 class ApplicationPropertyDefinitions():
     """
@@ -1590,6 +1870,8 @@ class ApplicationPropertyDefinitions():
         self.local_role_properties = {}
         self.role_assignment_properties = {}
         self.access_cred_properties = {}
+        self.local_agent_properties = {}
+        self.local_model_properties = {}
         self.resource_properties = {}
 
     def __str__(self) -> str:
@@ -1608,6 +1890,8 @@ class ApplicationPropertyDefinitions():
             "local_role_properties": self.local_role_properties,
             "role_assignment_properties": self.role_assignment_properties,
             "local_access_creds_properties": self.access_cred_properties,
+            "local_agent_properties": self.local_agent_properties,
+            "local_model_properties": self.local_model_properties,
             "resources": list(self.resource_properties.values())
         }
 
@@ -1687,6 +1971,30 @@ class ApplicationPropertyDefinitions():
         self._validate_types(name, property_type)
         self.access_cred_properties[name] = property_type
 
+    def define_local_agent_property(self, name: str, property_type: OAAPropertyType) -> None:
+        """ Define a local agent property.
+
+        Args:
+            name (str): name for property
+            property_type (OAAPropertyType): type for property
+
+        """
+        self.validate_name(name)
+        self._validate_types(name, property_type)
+        self.local_agent_properties[name] = property_type
+
+    def define_local_model_property(self, name: str, property_type: OAAPropertyType) -> None:
+        """ Define a local model property.
+
+        Args:
+            name (str): name for property
+            property_type (OAAPropertyType): type for property
+
+        """
+        self.validate_name(name)
+        self._validate_types(name, property_type)
+        self.local_model_properties[name] = property_type
+
     def define_resource_property(self, resource_type: str, name: str, property_type: OAAPropertyType) -> None:
         """ Define a property for a resource by type of resource.
 
@@ -1728,6 +2036,10 @@ class ApplicationPropertyDefinitions():
             valid_property_names = self.role_assignment_properties.keys()
         elif entity_type == "access_cred":
             valid_property_names = self.access_cred_properties.keys()
+        elif entity_type == "local_agent":
+            valid_property_names = self.local_agent_properties.keys()
+        elif entity_type == "local_model":
+            valid_property_names = self.local_model_properties.keys()
         elif entity_type == "resource":
             try:
                 valid_property_names = self.resource_properties[resource_type].keys()
@@ -1779,1493 +2091,3 @@ class ApplicationPropertyDefinitions():
 
         return
 
-
-###############################################################################
-# Custom IdP Provider
-###############################################################################
-class IdPEntityType(Enum):
-    """ IdP entity types.  """
-
-    USER = "USER"
-    GROUP = "GROUP"
-    DOMAIN = "DOMAIN"
-    APP = "APP"
-    APPASSIGNMENT = "APPASSIGNMENT"
-
-
-class IdPProviderType(str, Enum):
-    """ Veza supported IdP provider types. """
-
-    ACTIVE_DIRECTORY = "active_directory"
-    ANY = "any"
-    AZURE_AD = "azure_ad"
-    CUSTOM = "custom"
-    GOOGLE_WORKSPACE = "google_workspace"
-    OKTA = "okta"
-    ONE_LOGIN = "one_login"
-
-
-class CustomIdPProvider():
-    """
-    CustomIdPProvider class for modeling Identity Providers (IdP) using OAA Custom Identity Provider Template.
-
-    CustomIdPProvider class consists of IdP domain information, user, group and external associations for identities like AWS Roles.
-
-    Classes uses dictionaries to track most components, dictionaries are all keyed by string of the entity name
-
-    Args:
-        name (str): Name of IdP
-        idp_type (str): Type descriptor for IdP, can be unique or share across multiple IdP e.g. ldap, IPA
-        domain (str): IdP domain name
-        description (str, optional): Description for IdP. Defaults to None.
-
-    Attributes:
-        name (str): Name of custom IdP
-        idp_type (str): Type for IdP
-        description (str): Description for IdP
-        domain (CustomIdPDomain): Domain model, created with domain name at init
-        users (dict[CustomIdPUser]): Dictionary of CustomIdPUser class instances
-        groups (dict[CustomIdPGroup]): Dictionary of CustomIdPGroup class instances
-        property_definitions (IdPPropertyDefinitions): Custom Property definitions for IdP instance
-    """
-
-    TEMPLATE="identity_provider"
-
-    def __init__(self, name: str, idp_type: str, domain: str, description: str = None) -> None:
-        self.name = name
-        self.idp_type = idp_type
-        self.description = description
-
-        self.property_definitions = IdPPropertyDefinitions()
-        self.domain = CustomIdPDomain(domain, property_definitions=self.property_definitions)
-        self.users = CaseInsensitiveDict()
-        self.groups = CaseInsensitiveDict()
-        self.apps = CaseInsensitiveDict()
-
-    def __str__(self) -> str:
-        return f"Custom IdP Provider {self.name} - {self.idp_type}"
-
-    def __repr__(self) -> str:
-        return f"CustomIdPProvider(name={self.name!r}, idp_type={self.idp_type!r}, domain={self.domain!r}, description={self.description!r})"
-
-    def get_payload(self) -> dict:
-        """ Return formatted payload as dictionary for JSON conversion and upload """
-        payload = {}
-        payload['custom_property_definition'] = self.property_definitions.to_dict()
-        payload['name'] = self.name
-        payload['idp_type'] = self.idp_type
-        payload['domains'] = [self.domain.to_dict()]
-        payload['users'] = [user.to_dict() for user in self.users.values()]
-        payload['groups'] = [group.to_dict() for group in self.groups.values()]
-        payload['apps'] = [app.to_dict() for app in self.apps.values()]
-        return payload
-
-    def add_user(self, name: str, full_name: str = None, email: str = None, identity: str = None) -> CustomIdPUser:
-        """ Add user to IdP
-
-        if no identity is set name will be used as identity
-
-        Arguments:
-            name (str): primary ID for user
-            full_name (str): optional full name for display
-            email (str): optional email for user
-            identity (str): optional unique identifier for user, if None name is used as identity
-
-        Returns:
-            CustomIdPUser
-
-        """
-
-        if identity:
-            identifier = identity
-        else:
-            identifier = name
-
-        if identifier in self.users:
-            raise OAATemplateException(f"IdP user identified by {identifier} already defined")
-
-        self.users[identifier] = CustomIdPUser(name, email, full_name, identity, property_definitions=self.property_definitions)
-
-        return self.users[identifier]
-
-    def add_group(self, name: str, full_name: str = None, identity: str = None) -> CustomIdPGroup:
-        """ Add group to IdP.
-
-        Arguments:
-            name (str): primary ID for group
-            full_name (str): optional display name for group
-            identity (str): optional unique identifier for group, if None name is used as identity
-
-        """
-
-        if identity:
-            identifier = identity
-        else:
-            identifier = name
-
-        if identifier in self.groups:
-            raise OAATemplateException(f"IdP group {identifier} already defined")
-        self.groups[identifier] = CustomIdPGroup(name=name, full_name=full_name, identity=identity, property_definitions=self.property_definitions)
-
-        return self.groups[identifier]
-
-    def add_app(self, id: str, name: str) -> CustomIdPApp:
-        """_summary_
-
-        Args:
-            id (str): _description_
-            name (str): _description_
-
-        Raises:
-
-        Returns:
-            CustomIdPApp: _description_
-        """
-
-        if id in self.apps:
-            raise OAATemplateException(f"IdP App with ID {id} already defined")
-        self.apps[id] = CustomIdPApp(id=id, name=name, property_definitions=self.property_definitions)
-
-        return self.apps[id]
-
-
-class CustomIdPDomain():
-    """ Domain model for Custom IdP provider.
-
-    Args:
-        name (str): domain name
-
-    Attributes:
-        name (str): domain name
-
-    """
-
-    def __init__(self, name: str, property_definitions: IdPPropertyDefinitions = None) -> None:
-        self.name = name
-        self._tags = []
-        self._properties = {}
-        self._property_definitions = property_definitions
-
-    def __str__(self) -> str:
-        return f"Custom IdP Domain {self.name}"
-
-    def __repr__(self) -> str:
-        return f"CustomIdPDomain(name={self.name!r})"
-
-    def to_dict(self) -> dict:
-        """ Output function for payload. """
-        domain = {}
-        domain['name'] = self.name
-        domain['tags'] = [tag.__dict__ for tag in self._tags]
-        domain['custom_properties'] = self._properties
-
-        return domain
-
-    def set_property(self, property_name: str, property_value: any, ignore_none: bool = False) -> None:
-        """ Set custom property value for domain.
-
-        Property name must be defined for domain before calling `set_property()`. See example below and
-        `IdPPropertyDefinitions.define_domain_property` for more information.
-
-        Args:
-            property_name (str): Name of property
-            property_value (Any): Value for property, type should match OAAPropertyType for property definition
-            ignore_none (bool, optional): Do not set property if value is None. Defaults to False.
-
-        Raises:
-            OAATemplateException: If property with `property_name` is not defined.
-
-        Example:
-            >>> idp = CustomIdPProvider(name="Example IdP", idp_type="example", domain="example.com")
-            >>> idp.property_definitions.define_domain_property(name="my_property", property_type=OAAPropertyType.STRING)
-            >>> idp.domain.set_property(property_name="my_property", property_value="domain property value")
-        """
-
-        if not self._property_definitions:
-            raise OAATemplateException("No custom property definitions found for domain")
-
-        if ignore_none and property_value is None:
-            return
-
-        self._property_definitions.validate_property_name(property_name, entity_type=IdPEntityType.DOMAIN)
-        self._properties[property_name] = property_value
-
-    def add_tag(self, key: str, value: str = "") -> None:
-        """ Add a new tag to IdP Domain.
-
-        Args:
-            key (str): Key for tag, aka name. Must be present and must be letters, numbers or _ (underscore) only.
-            value (str, optional): Value for Tag, will appear in Veza as `key:value`. Must be letters, numbers, whitespace and the special characters @,._- only. Defaults to "".
-        """
-
-        tag = Tag(key=key, value=value)
-        if tag not in self._tags:
-            self._tags.append(tag)
-
-class IdPUserIdentityType(str, Enum):
-    """ Types of identities for permission mapping. """
-    Human = "HUMAN"
-    NonHuman = "NONHUMAN"
-
-    def __repr__(self) -> str:
-        return f'{self.__class__.__name__}.{self.name}'
-
-class CustomIdPUser():
-    """ User model for CustomIdPProvider.
-
-    Args:
-        name (str): username for identity
-        email (str): primary email for user
-        full_name (str): Display name for user
-        identity (str): unique identifier for user (may be same as username or email, or another unique ID like employee number)
-
-    Attributes:
-        name (str): username for identity
-        email (str): primary email for user
-        full_name (str): display name for user
-        identity (str): unique identifier for user (may be same as username or email, or another unique ID like employee number)
-        department (str): department name for user
-        is_active (bool): if user is active, defaults to None
-        is_guest (bool): if user is a guest type user, defaults to None
-        manager_id (str, optional): CustomIdPUser.identity of manager, defaults to None
-        identity_type (IdPUserIdentityType, optional): Identity type for user (HUMAN, NONHUMAN), defaults to HUMAN if not set.
-
-    """
-
-    def __init__(self, name: str, email: str = None, full_name: str = None, identity: str = None, property_definitions: IdPPropertyDefinitions = None) -> None:
-        self.name = name
-        self.email = email
-        self.full_name = full_name
-        self.identity = identity
-
-        self.department = None
-        self.is_active = None
-        self.is_guest = None
-        self.manager_id = None
-        self.identity_type = None
-
-        self._source_identity = None
-        self._groups = {}
-        self._assumed_roles = {}
-        self._tags = []
-        self._properties = {}
-        self._property_definitions = property_definitions
-        self._app_assignments = {}
-
-    def __str__(self) -> str:
-        return f"IdP User - {self.name} ({self.identity})"
-
-    def __repr__(self) -> str:
-        return f"CustomIdPUser(name={self.name!r}, email={self.email!r}, full_name={self.full_name!r}, identity={self.identity!r})"
-
-    def to_dict(self) -> dict:
-        """ Function to prepare user entity for payload """
-        user = {}
-        user['name'] = self.name
-        user['email'] = self.email
-        if self.identity:
-            user['identity'] = self.identity
-        else:
-            user['identity'] = self.name
-
-        user['full_name'] = self.full_name
-        user['department'] = self.department
-        user['is_active'] = self.is_active
-        user['is_guest'] = self.is_guest
-        user['manager_id'] = self.manager_id
-        user['groups'] = [g for g in self._groups.values()]
-        user['assumed_role_arns'] = [r for r in self._assumed_roles.values()]
-
-        user['source_identity'] = self._source_identity
-        user['tags'] = [tag.__dict__ for tag in self._tags]
-        user['custom_properties'] = self._properties
-        user['app_assignments'] = [r for r in self._app_assignments.values()]
-        user['identity_type'] = self.identity_type
-
-        return {k: v for k, v in user.items() if v not in [None, [], {}]}
-
-    def set_source_identity(self, identity: str, provider_type: IdPProviderType) -> None:
-        """ Set an source external identity for user.
-
-        - `source_identity` will connect CustomIdP user to a Veza graph IdP user.
-        - `provider_type` limits scope for finding matching IdP identities
-        - search all providers with `IdPProviderType.ANY`.
-
-        Args:
-            identity (str): Unique Identity of the source identity
-            provider_type (IdPProviderType): Type for provider to match source identity from
-
-        """
-        if not isinstance(provider_type, IdPProviderType):
-            raise OAATemplateException("provider_type must be IdPProviderType enum")
-
-        self._source_identity = {"identity": identity, "provider_type": provider_type}
-        return None
-
-    def add_assumed_role_arns(self, arns: List[str]) -> None:
-        """ Add AWS Roles to list of roles user can assume by ARN.
-
-        Args:
-            arns (list): list of role ARNs as strings that the user is allowed to assume
-
-        """
-
-        if not isinstance(arns, list):
-            raise OAATemplateException("arns must be of type list")
-
-        for arn in arns:
-            if arn not in self._assumed_roles:
-                self._assumed_roles[arn] = {"identity": arn}
-
-        return
-
-    def add_groups(self, group_identities: List[str]) -> None:
-        """ Add user to group(s) by group name
-
-        Args:
-            group_identities (list): list of strings for group identities to add user to
-
-        """
-
-        if not isinstance(group_identities, list):
-            raise OAATemplateException("group_identities must be list")
-
-        for group in group_identities:
-            if group not in self._groups:
-                self._groups[group] = {"identity": group}
-
-        return
-
-    def add_app_assignment(self, id: str, name: str, app_id: str, assignment_properties: Optional[dict] = None) -> None:
-        """Create App assignment for user
-
-        Args:
-            id (str): ID of App assignment, must be unique for user
-            name (str): Name of assignment
-            app_id (str): App ID, must exist in list of Apps for IDP
-            assignment_properties (Optional[dict], optional): Optional custom properties to set. Property names must be defined first. Defaults to None.
-
-        Raises:
-            OAATemplateException: Duplicate assignment ID
-            OAATemplateException: Unknown assignment property name
-        """
-        if assignment_properties is not None and not self._property_definitions:
-            raise OAATemplateException("No custom property definitions found for app assignemnt")
-
-        if assignment_properties is None:
-            assignment_properties = {}
-
-        if id in self._app_assignments:
-            raise OAATemplateException(f"App assignment with ID {id} already exists for user")
-
-        for property_name in assignment_properties.keys():
-            self._property_definitions.validate_property_name(property_name, entity_type=IdPEntityType.APPASSIGNMENT)
-
-        self._app_assignments[id] = {"id": id, "name": name, "app_id": app_id, "custom_properties": assignment_properties}
-
-        return
-
-    def set_property(self, property_name: str, property_value: any, ignore_none: bool = False) -> None:
-        """ Set custom property value for user.
-
-        Property name must be defined for users before calling `set_property()`. See example below and
-        `IdPPropertyDefinitions.define_user_property` for more information.
-
-        Args:
-            property_name (str): Name of property
-            property_value (Any): Value for property, type should match OAAPropertyType for property definition
-            ignore_none (bool, optional): Do not set property if value is None. Defaults to False.
-
-        Raises:
-            OAATemplateException: If property with `property_name` is not defined.
-
-        Example:
-            >>> idp = CustomIdPProvider(name="Example IdP", idp_type="example", domain="example.com")
-            >>> idp.property_definitions.define_user_property(name="my_property", property_type=OAAPropertyType.STRING)
-            >>> user1 = idp.add_user(name="User 1")
-            >>> user1.set_property("my_property", "user1 value")
-        """
-
-        if not self._property_definitions:
-            raise OAATemplateException("No custom property definitions found for user")
-
-        if ignore_none and property_value is None:
-            return
-
-        self._property_definitions.validate_property_name(property_name, entity_type=IdPEntityType.USER)
-        self._properties[property_name] = property_value
-
-    def add_tag(self, key: str, value: str = "") -> None:
-        """ Add a new tag to IdP User.
-
-        Args:
-            key (str): Key for tag, aka name. Must be present and must be letters, numbers or _ (underscore) only.
-            value (str, optional): Value for Tag, will appear in Veza as `key:value`. Must be letters, numbers, whitespace and the special characters @,._- only. Defaults to "".
-        """
-
-        tag = Tag(key=key, value=value)
-        if tag not in self._tags:
-            self._tags.append(tag)
-
-class CustomIdPGroup():
-    """ Group model for CustomIdPProvider.
-
-    Args:
-        name (str): name of group
-        full_name (str): optional full name for group
-        identity (str): optional identifier for group if name is not reference identifier
-
-    Parameters:
-        name (str): name of group
-        full_name (str): optional full name for group
-        identity (str): optional identifier for group, if None name is used as identity
-        is_security_group (bool): Property for group, defaults to None (unset)
-
-    """
-
-    def __init__(self, name: str, full_name: str = None, identity: str = None, property_definitions: IdPPropertyDefinitions = None) -> None:
-        self.name = name
-        self.full_name = full_name
-        self.identity = identity
-
-        self.is_security_group = None
-
-        self._source_identity = None
-        self._groups = {}
-        self._assumed_roles = {}
-        self._tags = []
-        self._properties = {}
-        self._property_definitions = property_definitions
-        self._app_assignments = {}
-
-    def __str__(self) -> str:
-        return f"IdP Group {self.name} ({self.identity})"
-
-    def __repr__(self) -> str:
-        return f"CustomIdPGroup(name={self.name!r}, full_name={self.full_name!r}, identity={self.identity!r})"
-
-    def to_dict(self) -> None:
-        """ Function to prepare user entity for payload. """
-
-        group = {}
-        group['name'] = self.name
-        if self.identity:
-            group['identity'] = self.identity
-        else:
-            group['identity'] = self.name
-
-        group['full_name'] = self.full_name
-        group['is_security_group'] = self.is_security_group
-        group['assumed_role_arns'] = [r for r in self._assumed_roles.values()]
-        group['groups'] = [g for g in self._groups.values()]
-        group['source_identity'] = self._source_identity
-        group['tags'] = [tag.__dict__ for tag in self._tags]
-        group['custom_properties'] = self._properties
-        group['app_assignments'] = [r for r in self._app_assignments.values()]
-
-        return {k: v for k, v in group.items() if v not in [None, [], {}]}
-
-    def set_source_identity(self, identity: str, provider_type: IdPProviderType) -> None:
-        """ Set an source external identity for group.
-
-        - `source_identity` will connect CustomIDP group to a Veza graph IdP group.
-        - `provider_type` limits scope for finding matching IdP group identities
-        - search all providers with `IdPProviderType.ANY`.
-
-        Args:
-            identity (str): Unique Identity of the source group
-            provider_type (IdPProviderType): Type for provider to match source identity from
-
-        """
-        if not isinstance(provider_type, IdPProviderType):
-            raise OAATemplateException("provider_type must be IdPProviderType enum")
-
-        self._source_identity = {"identity": identity, "provider_type": provider_type}
-        return None
-
-    def add_app_assignment(self, id: str, name: str, app_id: str, assignment_properties: Optional[dict] = None) -> None:
-        """Create App assignment for group
-
-        Args:
-            id (str): ID of App assignment, must be unique for group
-            name (str): Name of assignment
-            app_id (str): App ID, must exist in list of Apps for IDP
-            assignment_properties (Optional[dict], optional): Optional custom properties to set. Property names must be defined first. Defaults to None.
-
-        Raises:
-            OAATemplateException: Duplicate assignment ID
-            OAATemplateException: Unknown assignment property name
-        """
-        if assignment_properties is not None and not self._property_definitions:
-            raise OAATemplateException("No custom property definitions found for app assignemnt")
-
-        if assignment_properties is None:
-            assignment_properties = {}
-
-        if id in self._app_assignments:
-            raise OAATemplateException("App assignment with ID {id} already exists for group")
-
-        for property_name in assignment_properties.keys():
-            self._property_definitions.validate_property_name(property_name, entity_type=IdPEntityType.APPASSIGNMENT)
-
-        self._app_assignments[id] = {"id": id, "name": name, "app_id": app_id, "custom_properties": assignment_properties}
-
-        return
-
-    def add_assumed_role_arns(self, arns: List[str]) -> None:
-        """ Add AWS Roles to list of roles group members can assume by ARN.
-
-        Args:
-            arns (list): list of role ARNs as strings that the group members are allowed to assume
-
-        """
-
-        if not isinstance(arns, list):
-            raise OAATemplateException("arns must be of type list")
-
-        for arn in arns:
-            if arn not in self._assumed_roles:
-                self._assumed_roles[arn] = {"identity": arn}
-
-        return
-
-    def add_groups(self, group_identities: List[str]) -> None:
-        """ Add group to group(s) by group name
-
-        Adds current group to another parent group by the group identifier
-
-        Args:
-            group_identities (list): list of strings for group identities to add group to
-
-        """
-
-        if not isinstance(group_identities, list):
-            raise OAATemplateException("group_identities must be list")
-
-        for group_identity in group_identities:
-            if (self.identity and group_identity == self.identity) or (not self.identity and group_identity == self.name):
-                raise OAATemplateException(f"Cannot add a group to itself '{group_identity}'")
-            if group_identity not in self._groups:
-                self._groups[group_identity] = {"identity": group_identity}
-
-        return
-
-    def set_property(self, property_name: str, property_value: any, ignore_none: bool = False) -> None:
-        """ Set custom property value for group.
-
-        Property name must be defined for groups before calling `set_property()`. See example below and
-        `IdPPropertyDefinitions.define_group_property` for more information.
-
-        Args:
-            property_name (str): Name of property
-            property_value (Any): Value for property, type should match OAAPropertyType for property definition
-            ignore_none (bool, optional): Do not set property if value is None. Defaults to False.
-
-        Raises:
-            OAATemplateException: If property with `property_name` is not defined.
-
-        Example:
-            >>> idp = CustomIdPProvider(name="Example IdP", idp_type="example", domain="example.com")
-            >>> idp.property_definitions.define_group_property(name="my_property", property_type=OAAPropertyType.STRING)
-            >>> group1 = idp.add_group(name="Group 1")
-            >>> group1.set_property("my_property", "group1 value")
-        """
-
-        if not self._property_definitions:
-            raise OAATemplateException("No custom property definitions found for group")
-
-        if ignore_none and property_value is None:
-            return
-
-        self._property_definitions.validate_property_name(property_name, entity_type=IdPEntityType.GROUP)
-        self._properties[property_name] = property_value
-
-    def add_tag(self, key: str, value: str = "") -> None:
-        """ Add a new tag to IdP Group.
-
-        Args:
-            key (str): Key for tag, aka name. Must be present and must be letters, numbers or _ (underscore) only.
-            value (str, optional): Value for Tag, will appear in Veza as `key:value`. Must be letters, numbers, whitespace and the special characters @,._- only. Defaults to "".
-        """
-
-        tag = Tag(key=key, value=value)
-        if tag not in self._tags:
-            self._tags.append(tag)
-
-class CustomIdPApp:
-    """App model for CustomIdPProvider
-
-    Args:
-        id (str): ID for App, must be unique
-        name (str): Name for App
-        property_definitions (IdPPropertyDefinitions, optional): Custom property definitions, required to set custom properties. Defaults to None.
-
-    Attributes:
-        id (str): ID for App, must be unique
-        name (str): Name for App
-        description (str): Description property for App
-    """
-
-    def __init__(self, id: str, name: str, property_definitions: IdPPropertyDefinitions = None) -> None:
-
-        self.id = id
-        self.name = name
-        self.description = ""
-
-        self._assumed_roles = {}
-        self._tags = []
-        self._properties = {}
-        self._property_definitions = property_definitions
-
-    def __str__(self) -> str:
-        return f"IdP App - {self.name} ({self.id})"
-
-    def __repr__(self) -> str:
-        return f"CustomIdPApp(id={self.id!r}, name={self.name!r})"
-
-    def to_dict(self) -> dict:
-        app = {
-            "id": self.id,
-            "name": self.name,
-            "description": self.description,
-            "assumed_role_arns": [r for r in self._assumed_roles.values()],
-            "custom_properties": self._properties,
-            "tags": [tag.__dict__ for tag in self._tags]
-        }
-        return app
-
-    def add_assumed_role_arns(self, arns: List[str]) -> None:
-        """ Add AWS Roles to list of roles App can assume by ARN. Any Users or Groups assigned to the App are represented as being able to assume the roles.
-
-        Args:
-            arns (list): list of role ARNs as strings that the user is allowed to assume
-
-        """
-
-        if not isinstance(arns, list):
-            raise OAATemplateException("arns must be of type list")
-
-        for arn in arns:
-            if arn not in self._assumed_roles:
-                self._assumed_roles[arn] = {"identity": arn}
-
-        return
-
-    def set_property(self, property_name: str, property_value: any, ignore_none: bool = False) -> None:
-        """ Set custom property value for app.
-
-        Property name must be defined for app before calling `set_property()`. See example below and
-        `IdPPropertyDefinitions.define_app_property` for more information.
-
-        Args:
-            property_name (str): Name of property
-            property_value (Any): Value for property, type should match OAAPropertyType for property definition
-            ignore_none (bool, optional): Do not set property if value is None. Defaults to False.
-
-        Raises:
-            OAATemplateException: If property with `property_name` is not defined.
-
-        Example:
-            >>> idp = CustomIdPProvider(name="Example IdP", idp_type="example", domain="example.com")
-            >>> idp.property_definitions.define_app_property(name="my_property", property_type=OAAPropertyType.STRING)
-            >>> app1 = idp.add_app(id="app1", ="App 1")
-            >>> app1.set_property("my_property", "app1 value")
-        """
-
-        if not self._property_definitions:
-            raise OAATemplateException("No custom property definitions found for app")
-
-        if ignore_none and property_value is None:
-            return
-
-        self._property_definitions.validate_property_name(property_name, entity_type=IdPEntityType.APP)
-        self._properties[property_name] = property_value
-
-    def add_tag(self, key: str, value: str = "") -> None:
-        """ Add a new tag to IdP User.
-
-        Args:
-            key (str): Key for tag, aka name. Must be present and must be letters, numbers or _ (underscore) only.
-            value (str, optional): Value for Tag, will appear in Veza as `key:value`. Must be letters, numbers, whitespace and the special characters @,._- only. Defaults to "".
-        """
-
-        tag = Tag(key=key, value=value)
-        if tag not in self._tags:
-            self._tags.append(tag)
-
-
-class IdPPropertyDefinitions():
-    """
-    Model for defining custom properties for CustomIdPProvider and its entities (users, groups, domain).
-
-    Property definitions define the names for additional entity properties and the expected type.
-
-    Attributes:
-        domain_properties (dict): property definitions for IdP Domain
-        user_properties (dict): property definitions for IdP users
-        group_properties (dict): property definitions for IdP groups
-
-    """
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.domain_properties = {}
-        self.user_properties = {}
-        self.group_properties = {}
-        self.app_properties = {}
-        self.app_assignment_properties = {}
-
-    def __str__(self) -> str:
-        return f"IdP Property Definitions"
-
-    def __repr__(self) -> str:
-        return f"IdPPropertyDefinitions()"
-
-    def to_dict(self) -> dict:
-        """ Returns custom IdP property definitions. """
-
-        return {"domain_properties": self.domain_properties,
-                "user_properties": self.user_properties,
-                "group_properties": self.group_properties,
-                "app_properties": self.app_properties,
-                "app_assignment_properties": self.app_assignment_properties
-                }
-
-    def define_domain_property(self, name: str, property_type: OAAPropertyType) -> None:
-        """ Define a domain custom property.
-
-        Args:
-            name (str): name of property
-            property_type (OAAPropertyType): type for property
-        """
-        self._validate_types(name, property_type)
-        self.domain_properties[name] = property_type
-
-    def define_user_property(self, name: str, property_type: OAAPropertyType) -> None:
-        """ Define a user custom property.
-
-        Args:
-            name (str): name of property
-            property_type (OAAPropertyType): type for property
-        """
-        self._validate_types(name, property_type)
-        self.user_properties[name] = property_type
-
-    def define_group_property(self, name: str, property_type: OAAPropertyType) -> None:
-        """ Define a group custom property.
-
-        Args:
-            name (str): name of property
-            property_type (OAAPropertyType): type for property
-        """
-        self._validate_types(name, property_type)
-        self.group_properties[name] = property_type
-
-    def define_app_property(self, name: str, property_type: OAAPropertyType) -> None:
-        """Define an app custom property
-
-        Args:
-            name (str): name of property
-            property_type (OAAPropertyType): type for property
-        """
-        self._validate_types(name, property_type)
-        self.app_properties[name] = property_type
-
-    def define_app_assignment_property(self, name: str, property_type: OAAPropertyType) -> None:
-        """Define an app assignment custom property
-
-        Args:
-            name (str): name of property
-            property_type (OAAPropertyType): type for property
-        """
-        self._validate_types(name, property_type)
-        self.app_assignment_properties[name] = property_type
-
-    def validate_property_name(self, property_name: str, entity_type: str) -> None:
-        """ Validate that a property name has been defined for a given IdP entity.
-
-        Raises exception if property name has not been previously defined for entity
-
-        Args:
-            property_name (str): name of property to validate
-            entity_type (str): type of entity custom property is for (domain, users, groups)
-
-        Raises:
-            OAATemplateException: If property name is not defined
-
-        """
-        valid_property_names = []
-        if entity_type == IdPEntityType.DOMAIN:
-            valid_property_names = self.domain_properties.keys()
-        elif entity_type == IdPEntityType.USER:
-            valid_property_names = self.user_properties.keys()
-        elif entity_type == IdPEntityType.GROUP:
-            valid_property_names = self.group_properties.keys()
-        elif entity_type == IdPEntityType.APP:
-            valid_property_names = self.app_properties.keys()
-        elif entity_type == IdPEntityType.APPASSIGNMENT:
-            valid_property_names = self.app_assignment_properties.keys()
-        else:
-            raise OAATemplateException(f"Unknown entity type '{entity_type}', cannot validate property names")
-
-        # validate against names as all lowercase
-        valid_property_names = [i.lower() for i in valid_property_names]
-
-        if property_name.lower() in valid_property_names:
-            return True
-        else:
-            raise OAATemplateException(f"unknown property name {property_name}")
-
-    def _validate_types(self, name: str, property_type: OAAPropertyType) -> None:
-        """ Validate that custom property parameters are of the correct types (helper function).
-
-        Args:
-            name (str): name or property
-            property_type (OAAPropertyType): OAA type for property
-
-        """
-        if not isinstance(name, str):
-            raise OAATemplateException("property name must be type string")
-        if not isinstance(property_type, OAAPropertyType):
-            raise OAATemplateException("property_type must be type OAAPropertyType enum")
-
-
-###############################################################################
-# Shared models
-###############################################################################
-class Tag():
-    """ Veza Tag data model.
-
-    Args:
-        key (str): key for tag, aka name. Must be present and must be letters, numbers or _ (underscore) only.
-        value (str, optional): Value for tag, will appear in Veza as `key:value`. Must be letters, numbers, whitespace and the special characters @,._- only.
-
-    Attributes:
-        key (str): key for tag, aka name. Must be present and must be letters, numbers or _ (underscore) only.
-        value (str): Value for tag, will appear in Veza as `key:value`. Must be letters, numbers and the special characters @,._ only.
-    """
-
-    def __init__(self, key: str, value: str = "") -> None:
-        self.key = str(key)
-        self.value = str(value)
-
-        if not re.match(r"^[\w\d_]+$", self.key):
-            raise OAATemplateException(f"Invalid characters in tag key. Key '{self.key}'. Key may only contain letters, numbers, and _ (underscore)")
-        if self.value != "" and not re.match(r"^[\w\d\s_,@\.-]+$", self.value):
-            raise OAATemplateException(f"Invalid characters in tag value. Value '{self.value}'. Value may only contain letters, numbers, whitespace and the special characters @,._-")
-
-    def __str__(self) -> str:
-        if self.value:
-            return f"Tag {self.key}:{self.value}"
-        else:
-            return f"Tag {self.key}"
-
-    def __repr__(self) -> str:
-        return f"Tag(key={self.key!r}, value={self.value!r})"
-
-    def __eq__(self, o):
-        if self.key == o.key and self.value == o.value:
-            return True
-        else:
-            return False
-
-class EntityOwner():
-
-    def __init__(self, external_id: str, owner_type: str, is_primary: bool = False) -> None:
-        self.external_id = external_id
-        self.owner_type = owner_type
-        self.primary = is_primary
-
-    def __str__(self) -> str:
-        return f"EntityOwner {self.owner_type}:{self.external_id}"
-
-    def __repr__(self) -> str:
-        return f"EntityOwner(external_id={self.external_id!r}, owner_type={self.owner_type!r}, is_primary={self.is_primary!r})"
-
-    def __eq__(self, o):
-        if self.external_id == o.external_id and self.owner_type == o.owner_type:
-            return True
-        else:
-            return False
-
-###############################################################################
-# Human Resource Information Systems (HRIS)
-###############################################################################
-
-class HRISProvider():
-    """Class for modeling Human Resource Information Systems (HRIS) Template
-
-    HRIS template consists of base information about the HRIS instance, Employees and Groups.
-
-    Employees and Groups are tracked in case insensitive dictionaries that can be used to reference entities after creation.
-
-    Args:
-        name (str): Name for HRIS Instance
-        hris_type (str): Type for HRIS. Typically the vendor or product name.
-        url (str): Instance URL for HRIS.
-
-    Attributes:
-        employees (dict[string]): Dictionary of HRISEmployee instances keyed by Employee ID
-        groups (dict[string]): Dictionary of HRISGroup instances keyed by Group ID
-    """
-
-    TEMPLATE = "hris"
-
-    def __init__(self, name: str, hris_type: str, url: str):
-        self.name = name
-
-        # TODO: validate HRIS type against supported characters
-        self.hris_type = hris_type
-
-        self.system = HRISSystem(name, url=url)
-
-        self.employees = CaseInsensitiveDict()
-        self.groups = CaseInsensitiveDict()
-
-        self.property_definitions = HRISPropertyDefinitions()
-
-    def __str__(self) -> str:
-        return f"HRISProvider {self.name} - {self.hris_type}"
-
-    def __repr__(self) -> str:
-        return f"HRISProvider(name={self.name!r}, hris_type={self.hris_type!r}, url={self.system.url!r})"
-
-    def get_payload(self) -> dict:
-        """Get the OAA payload.
-
-        Returns the complete OAA template payload for HRIS as serializable dictionary
-
-        Returns:
-            dict: OAA payload as dictionary
-        """
-
-        payload = {"name": self.name,
-                    "hris_type": self.hris_type,
-                    "custom_property_definition": self.property_definitions.to_dict(),
-                    "system": self.system.to_dict(),
-                    "employees": [employee.to_dict() for employee in self.employees.values()],
-                    "groups": [group.to_dict() for group in self.groups.values()]
-                  }
-
-        return payload
-
-    def add_employee(self, unique_id: str, name: str, employee_number: str, first_name: str, last_name: str, is_active: bool, employment_status: str) -> HRISEmployee:
-        """Add a new Employee
-
-        Function creates a new HRISEmployee instance and adds it to the `HRISProvider.employees` keyed by the `unique_id`
-
-        Args:
-            unique_id (str): Unique Identifier for Employee
-            name (str): Display name for employee
-            employee_number (str): The employee's number that appears in the third-party integration.
-            first_name (str): Employee first name
-            last_name (str): Employee last name (family name)
-            is_active (bool): Boolean for employee active status
-            employment_status (str): String representation of employee status, e.g. "ACTIVE", "TERMINATE", "PENDING"
-
-        Raises:
-            OAATemplateException: Employee with ID already exists
-
-        Returns:
-            HRISEmployee: Entity for new employee
-        """
-
-        if unique_id in self.employees:
-            raise OAATemplateException(f"Employee with unique ID already exists, {unique_id}")
-
-        self.employees[unique_id] = HRISEmployee(unique_id=unique_id,
-                                                    name=name,
-                                                    employee_number=employee_number,
-                                                    first_name=first_name,
-                                                    last_name=last_name,
-                                                    is_active=is_active,
-                                                    employment_status=employment_status
-                                                )
-
-        self.employees[unique_id]._property_definitions = self.property_definitions.employee_properties
-
-        return self.employees[unique_id]
-
-    def add_group(self, unique_id: str, name: str, group_type: str) -> HRISGroup:
-        """Add a new Group
-
-        Used to represent any subset of employees, such as PayGroup or Team. Employees can be in multiple Groups. Groups can also
-        be members of other groups to create hierarchy.
-
-        Some properties of HRISEmployee such as `department` must reference an existing HRISGroup by its ID.
-
-        Args:
-            unique_id (str): Unique ID for group
-            name (str): Display name
-            group_type (str): Type for group such as "Team", "Department", "Cost Center"
-
-        Returns:
-            HRISGroup: Entity for new group
-        """
-        if unique_id in self.groups:
-            raise OAATemplateException(f"Group with unique ID already exists, {unique_id}")
-
-        self.groups[unique_id] = HRISGroup(unique_id=unique_id, name=name, group_type=group_type)
-        self.groups[unique_id]._property_definitions = self.property_definitions.group_properties
-
-        return self.groups[unique_id]
-
-
-class HRISSystem():
-    """HRISSystem information
-
-    Representation for HRISSystem information. The system information is used to represent additional details
-    for the HRIS Instance.
-
-    Args:
-        name (str): Name for system Instance
-        url (str, optional): URL for instance . Defaults to "". TODO: Is this right?
-    """
-
-    def __init__(self, name: str, url: str = ""):
-
-
-        self.name = name
-        self.unique_id = name
-        self.url = url
-        self.idp_providers = []
-
-
-    def __str__(self) -> str:
-        return f"HRISSystem - {self.name}"
-
-    def __repr__(self) -> str:
-        return f"HRISSystem(name={self.name!r}, url={self.url!r})"
-
-    def to_dict(self) -> dict:
-        payload = {"id": self.unique_id,
-                   "name": self.name,
-                   "url": self.url,
-                   "idp_providers": self.idp_providers
-                  }
-
-        return payload
-
-    def add_idp_type(self, provider_type: IdPProviderType) -> list[IdPProviderType]:
-        """Link HRIS to External IdP of given type
-
-        Sets the IdP types (Okta, AzureAD, ect) for Veza to link employee identities too.
-
-        Args:
-            provider_type (IdPProviderType): Type of IdP for source identities
-
-        Raises:
-            ValueError: provider_type must be IdPProviderType enum
-
-        Returns:
-            list[IdPProviderType]: List of configured IdP types
-        """
-
-        if not isinstance(provider_type, IdPProviderType):
-            raise ValueError(f"provider_type must be of type IdPProviderType enum, received {type(provider_type)}")
-
-        if provider_type not in self.idp_providers:
-            self.idp_providers.append(provider_type)
-
-        return self.idp_providers
-
-class HRISEmployee():
-    """HRIS Employee Entity
-
-    Represents an employee record in the HRIS system. Each employee must have a unique ID to identify it in the payload. This ID
-    is also used to reference one employee to the other for manager hierarchy.
-
-    Init variables are all required and must not be empty such as `""`
-
-    Args:
-        unique_id (str): Unique Identifier for Employee
-        name (str): Name for employee record.
-        employee_number (str): The employee's number that appears in the third-party integration.
-        first_name (str): Employee first name
-        last_name (str): Employee last name (family name)
-        is_active (bool): Boolean for employee active status
-        employment_status (str): String representation of employee status, e.g. "ACTIVE", "TERMINATE", "PENDING"
-
-    Parameters:
-        company (str): The company (or subsidiary) the employee works for.
-        preferred_name (str): The employee's preferred first name.
-        display_full_name (str): The employee's full name, to use for display purposes.
-        canonical_name (str): The employee's canonical name.
-        username (str): The employee's username that appears in the integration UI.
-        email (str): The employee's work email.
-        idpid (str): The ID for this employee on the destination IDP provider used to automatically connect to it, if not supplied email is used.
-        personal_email (str): The employee's personal email.
-        home_location (str): The employee's home location.
-        work_location (str): The employee's work location.
-        cost_center (str): The cost center ID (Group ID) that the employee is in.
-        department (str): The department ID (Group ID) that the employee is in.
-        managers (str): The employee IDs of the employee's managers.
-        groups (str): The IDs of groups this user is in
-        start_date (str): The date that the employee started working. RFC3339 timestamp.
-        termination_date (str): The employee's termination date. RFC3339 timestamp.
-        job_title (str): The title of the employee.
-        employment_typ (str): The employee's type of employment. For example: FULL_TIME, PART_TIME, INTERN, CONTRACTOR, FREELANCE.
-        primary_time_zone (str): The time zone which the employee primarily lives.
-
-    Raises:
-        ValueError: Any of the required arguments are empty.
-
-    """
-    def __init__(self, unique_id: str, name: str, employee_number: str, first_name: str, last_name: str, is_active: bool, employment_status: str):
-
-
-        # required values
-        if not unique_id:
-            raise ValueError("unique_id cannot be empty")
-        if not name:
-            raise ValueError("name cannot be empty")
-        if not employee_number:
-            raise ValueError("employee_number cannot be empty")
-        if not first_name:
-            raise ValueError("first_name cannot be empty")
-        if not last_name:
-            raise ValueError("last_name cannot be empty")
-        if not employment_status:
-            raise ValueError("employment_status cannot be empty")
-        if not isinstance(is_active, bool):
-            raise ValueError("is_active must be boolean type")
-
-        self.unique_id: str = unique_id
-        self.name: str = name
-        self.employee_number: str = employee_number
-        self.first_name: str = first_name
-        self.last_name: str = last_name
-        self.employment_status: str = employment_status
-        self.is_active: bool = is_active
-
-        # optional parameters
-        self.company: str = ""
-        self.preferred_name: str = ""
-        self.display_full_name: str = ""
-        self.canonical_name: str = ""
-        self.username: str = ""
-        self.email: str = ""
-        self.idp_id: str = ""
-        self.personal_email: str = ""
-        self.home_location: str = ""
-        self.work_location: str = ""
-        self.cost_center: str = ""
-        self.department: str = ""
-        self.managers = []
-        self.groups = []
-        self.start_date: str = ""
-        self.termination_date: str = ""
-        self.job_title: str = ""
-        self.employment_types = []
-        self.primary_time_zone: str = ""
-
-        self._property_definitions = None
-        self.custom_properties: dict = {}
-
-    def __str__(self) -> str:
-        return f"HRISEmployee - {self.name} ({self.unique_id})"
-
-    def __repr__(self) -> str:
-        return f"HRISEmployee(unique_id: {self.unique_id!r}, name: {self.name!r}, employee_number: {self.employee_number!r}, first_name: {self.first_name!r}, last_name: {self.last_name!r}, is_active: {self.is_active!r}, employment_status: {self.employment_status!r})"
-
-    def add_group(self, group_id: str) -> None:
-        """Add employee to group
-
-        Adds employee to a group by the group ID. Group must also be defined for HRISInstance with `HRISProvider.add_group()`
-
-        Args:
-            group_id (str): Unique ID of HRISGroup to add employee too
-        """
-
-        if group_id not in self.groups:
-            self.groups.append(group_id)
-
-        return
-
-    def add_manager(self, manager_id: str) -> None:
-        """Add manager to Employee
-
-        Adds a manager to the employee by the manager's HRISEmployee instance unique ID. Manger employee record must also exist.
-
-        Args:
-            manager_id (str): Unique ID for manager HRISEmployee instance
-        """
-
-        if manager_id not in self.managers:
-            self.managers.append(manager_id)
-
-        return
-
-    def set_property(self, property_name: str, property_value: any, ignore_none: bool = False) -> None:
-        """Set Employee custom property value
-
-        Property name must be defined for employee before calling `set_property`
-
-        Args:
-            property_name (str): Name of property
-            property_value (any): Value for property, type should match OAAPropertyType for property definition
-            ignore_none (bool, optional): Do not set property if value is None. Defaults to False.. Defaults to False.
-
-        Raises:
-            OAATemplateException: If property with `property_name` is not defined.
-        """
-
-        if self._property_definitions is not None:
-            if not isinstance(self._property_definitions, CaseInsensitiveDict):
-                raise OAATemplateException("employee property_definitions not of expected type")
-
-            if property_name not in self._property_definitions:
-                raise OAATemplateException(f"unknown employee property name {property_name}")
-        else:
-            log.warning("Employee does not have property names set, cannot validate property name")
-
-        if ignore_none and property_value is None:
-            return
-
-        self.custom_properties[property_name] = property_value
-
-        return
-
-    def to_dict(self) -> dict:
-        """ Output employee to dictionary for payload. """
-
-        user = {"id": self.unique_id,
-                "name": self.name,
-                "employee_number": self.employee_number,
-                "company": self.company,
-                "first_name": self.first_name,
-                "last_name": self.last_name,
-                "preferred_name": self.preferred_name,
-                "display_full_name": self.display_full_name,
-                "canonical_name": self.canonical_name,
-                "username": self.username,
-                "email": self.email,
-                "idp_id": self.idp_id,
-                "personal_email": self.personal_email,
-                "home_location": self.home_location,
-                "work_location": self.work_location,
-                "employment_status": self.employment_status,
-                "start_date": self.start_date,
-                "termination_date": self.termination_date,
-                "job_title": self.job_title,
-                "employment_types": self.employment_types,
-                "primary_time_zone": self.primary_time_zone,
-                "custom_properties": self.custom_properties
-                }
-
-        if isinstance(self.is_active, bool):
-            user["is_active"] = self.is_active
-
-        # entities that need reference by ID
-        user["groups"] = [{"id": group_id} for group_id in self.groups]
-        user["managers"] = [{"id": manager_id} for manager_id in self.managers]
-        if self.department:
-            user["department"] = {"id": self.department}
-        if self.cost_center:
-            user["cost_center"] = {"id": self.cost_center}
-
-        # filter out None/empty values before return
-        return {k: v for k, v in user.items() if v not in [None, [], {}, ""]}
-
-
-class HRISGroup():
-    """HRIS Group
-
-    Represents any group of employees in the HRIS system. HRISGroups can be used to represent teams, departments, cost centers
-    or any organizational unit. Each group has a type to make searching and grouping easier.
-
-    Group's Unique ID must be unique across all group types.
-
-    Args:
-        unique_id (str): Unique ID for group
-        name (str): Display name
-        group_type (str): Type for group such as "Team", "Department", "Cost Center"
-    """
-
-    def __init__(self, unique_id: str, name: str, group_type: str):
-
-
-        self.unique_id = unique_id
-        self.name = name
-        self.group_type = group_type
-
-        self._property_definitions = None
-        self.custom_properties = {}
-
-    def __str__(self) -> str:
-        return f"HRISGroup - {self.name} ({self.unique_id}) - {self.group_type}"
-
-    def __repr__(self) -> str:
-        return f"HRISGroup(unique_id={self.unique_id!r}, name={self.name!r}, group_type={self.group_type!r})"
-
-    def set_property(self, property_name: str, property_value: any, ignore_none: bool = False) -> None:
-        """Set HRIS Group custom property value
-
-        Property name must be defined for group before calling `set_property`
-
-        Args:
-            property_name (str): Name of property
-            property_value (any): Value for property, type should match OAAPropertyType for property definition
-            ignore_none (bool, optional): Do not set property if value is None. Defaults to False.. Defaults to False.
-
-        Raises:
-            OAATemplateException: If property with `property_name` is not defined.
-        """
-
-        if self._property_definitions is not None:
-            if not isinstance(self._property_definitions, CaseInsensitiveDict):
-                raise OAATemplateException("group property_definitions not of expected type")
-
-            if property_name not in self._property_definitions:
-                raise OAATemplateException(f"unknown group property name {property_name}")
-        else:
-            log.warning("Group does not have property names set, cannot validate property name")
-
-        if ignore_none and property_value is None:
-            return
-
-        self.custom_properties[property_name] = property_value
-
-        return
-
-    def to_dict(self) -> dict:
-        """Dictionary output for inclusion in payload"""
-
-        group = {"id": self.unique_id,
-                 "name": self.name,
-                 "group_type": self.group_type,
-                 "custom_properties": self.custom_properties
-                }
-        return {k: v for k, v in group.items() if v not in [None, [], {}]}
-
-class HRISPropertyDefinitions():
-
-    def __init__(self):
-
-        self.system_properties = CaseInsensitiveDict()
-        self.employee_properties = CaseInsensitiveDict()
-        self.group_properties = CaseInsensitiveDict()
-
-    def to_dict(self) -> dict:
-
-        definitions = {
-            "system_properties": {k:v for k,v in self.system_properties.items()},
-            "employee_properties": {k:v for k,v in self.employee_properties.items()},
-            "group_properties": {k:v for k,v in self.group_properties.items()}
-        }
-
-        return definitions
-
-    def define_system_property(self, name: str, property_type: OAAPropertyType) -> None:
-        self.validate_name(name)
-        self._validate_types(name, property_type)
-        self.system_properties[name] = property_type
-
-    def define_employee_property(self, name: str, property_type: OAAPropertyType) -> None:
-        self.validate_name(name)
-        self._validate_types(name, property_type)
-        self.employee_properties[name] = property_type
-
-    def define_group_property(self, name: str, property_type: OAAPropertyType) -> None:
-        self.validate_name(name)
-        self._validate_types(name, property_type)
-        self.group_properties[name] = property_type
-
-    def _validate_types(self, name: str, property_type: OAAPropertyType) -> None:
-        """ Helper function to validate that custom property parameters are of the correct types.
-
-        Args:
-            name (str): name or property
-            property_type (OAAPropertyType): OAA type for property
-
-        """
-        if not isinstance(name, str):
-            raise OAATemplateException("property name must be type string")
-        if not isinstance(property_type, OAAPropertyType):
-            raise OAATemplateException("property_type must be type OAAPropertyType enum")
-
-        return
-
-    def validate_name(self, name: str) -> None:
-        """Check property name for valid characters
-
-        Raises an exception if the name string does not match required pattern. Name must start with
-        a character and can only contain letters and _ character.
-
-        Args:
-            name (str): name of property to validate
-
-        Raises:
-            OAATemplateException: Name is not a string
-            OAATemplateException: Name contains invalid characters or does not start with a letter
-        """
-
-        if not isinstance(name, str):
-            raise OAATemplateException(f"Property name must be a string, received {type(name)}")
-
-        if not re.match(PROPERTY_NAME_REGEX, name.lower()):
-            raise OAATemplateException(f"Lower-cased property name must match the pattern: '{PROPERTY_NAME_REGEX}'. Invalid name: {name}")
-
-        return
-
-
-###############################################################################
-# Helper functions
-###############################################################################
-
-def append_helper(base, addition):
-    """ Helper function to simplify appending.
-
-    Handles multiple cases:
-
-    - base is None: starts a list
-    - addition is list: extends base with list
-    - addition is anything else: append element to list
-
-    Args:
-        base (List or None): base list to append to, can be None
-        addition (*): What to append to the list
-
-    Returns:
-        list: will always return a list
-    """
-    if addition is None:
-        return base
-
-    if base is None:
-        base = []
-
-    if isinstance(addition, list):
-        base.extend(addition)
-    else:
-        base.append(addition)
-
-    return base
-
-def unique_strs(input: list) -> list:
-    """Returns a list of unique strings from input list case insensitive
-
-    Returns the unique list of strings from input list in a case insensitive manner.
-    For duplicate strings with different cast (e.g. "STRING" and "string") the case of
-    the first occurrence is returned.
-
-    Args:
-        input (list): list of strings
-
-    Returns:
-        list: list of unique strings
-    """
-
-    if not isinstance(input, list):
-        raise ValueError("input must be list")
-
-    unique = []
-    seen = []
-    for e in input:
-        if not isinstance(e, str):
-            raise ValueError("input elements must be string")
-        if e.lower() not in seen:
-            seen.append(e.lower())
-            unique.append(e)
-
-    return unique

@@ -3,7 +3,7 @@
 
 Classes for calling Veza APIs and managing OAA providers and data sources.
 
-Copyright 2022 Veza Technologies Inc.
+Copyright 2026 Veza Technologies Inc.
 
 Use of this source code is governed by the MIT
 license that can be found in the LICENSE file or at
@@ -33,7 +33,7 @@ from urllib3.util.retry import Retry
 
 from oaaclient import __version__ as OAACLIENT_VERSION
 import oaaclient.utils as oaautils
-from oaaclient.templates import CustomApplication, CustomIdPProvider
+from oaaclient.templates import CustomApplication, CustomIdPProvider, EntityEnrichment
 
 PROVIDER_ICON_MAX_SIZE = 64_000
 
@@ -477,14 +477,14 @@ class OAAClient():
     def push_application(self,
                          provider_name: str,
                          data_source_name: str,
-                         application_object: CustomApplication|CustomIdPProvider,
+                         application_object: CustomApplication|CustomIdPProvider|EntityEnrichment,
                          save_json: bool = False,
                          create_provider: bool = False,
                          options: dict|None = None
                          ) -> dict:
         """Push an OAA Application Object (such as CustomApplication).
 
-        Extracts the OAA JSON payload from the supplied OAA class (e.g. CustomApplication, CustomIdPProvider, etc) and push to
+        Extracts the OAA JSON payload from the supplied OAA class (e.g. CustomApplication, CustomIdPProvider, EntityEnrichment etc) and push to
         the supplied Data Source.
 
         The Provider with `provider_name` must be a valid existing Provider or `create_provider` must be set to `True`.  A new data source
