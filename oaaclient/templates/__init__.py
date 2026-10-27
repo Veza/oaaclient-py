@@ -23,6 +23,10 @@ from .common import (PROPERTY_NAME_REGEX, CaseInsensitiveDict, EntityOwner,
                      IdentityMappingType, Provider, Tag, append_helper, unique_strs)
 from .enrichment import (EntityEnrichment, EnrichedEntity, EntityEnrichmentPropertyDefinitions)
 from .exceptions import OAATemplateException
+from .host import (HostCredential, HostEnvironment, HostGranteeType,
+                   HostGroup, HostIdentityType, HostNode,
+                   HostPrivilegeDefinition, HostPropertyDefinitions,
+                   HostProvider, HostResource, HostUser)
 from .hris import (HRISEmployee, HRISGroup, HRISPropertyDefinitions,
                    HRISProvider, HRISSystem)
 from .idp import (CustomIdPApp, CustomIdPDomain, CustomIdPGroup,
@@ -68,6 +72,10 @@ __all__ = [
     # HRIS
     'HRISProvider', 'HRISSystem', 'HRISEmployee', 'HRISGroup',
     'HRISPropertyDefinitions',
+    # Host
+    'HostProvider', 'HostEnvironment', 'HostNode', 'HostUser', 'HostGroup',
+    'HostCredential', 'HostResource', 'HostPrivilegeDefinition',
+    'HostPropertyDefinitions', 'HostGranteeType', 'HostIdentityType',
     # Secret Store
     'SecretStoreSubmission', 'SecretStore', 'SecretStorePermission',
     'SecretStoreVault', 'SecretStoreVaultEntry', 'VaultEntryIdentity',

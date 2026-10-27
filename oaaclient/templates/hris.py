@@ -12,8 +12,9 @@ from __future__ import annotations
 
 import logging
 import re
+from typing import Optional
 
-from .common import PROPERTY_NAME_REGEX, CaseInsensitiveDict, IdPProviderType, OAAPropertyType
+from .common import PROPERTY_NAME_REGEX, CaseInsensitiveDict, IdentityMappingConfigurationSubmission, IdPProviderType, OAAPropertyType
 from .exceptions import OAATemplateException
 
 log = logging.getLogger(__name__)
@@ -150,6 +151,9 @@ class HRISSystem():
     Args:
         name (str): Name for system Instance
         url (str, optional): URL for instance . Defaults to "". TODO: Is this right?
+
+    Attributes:
+        identity_mapping_configuration (IdentityMappingConfigurationSubmission): Identity mapping configuration, set via :meth:`set_identity_mapping_configuration`.
     """
 
     def __init__(self, name: str, url: str = ""):
@@ -159,6 +163,7 @@ class HRISSystem():
         self.unique_id = name
         self.url = url
         self.idp_providers = []
+        self.identity_mapping_configuration: Optional[IdentityMappingConfigurationSubmission] = None
 
 
     def __str__(self) -> str:
@@ -174,7 +179,24 @@ class HRISSystem():
                    "idp_providers": self.idp_providers
                   }
 
+        if self.identity_mapping_configuration is not None:
+            payload["identity_mapping_configuration"] = self.identity_mapping_configuration.to_dict()
+
         return payload
+
+    def set_identity_mapping_configuration(self) -> IdentityMappingConfigurationSubmission:
+        """Create and set the identity mapping configuration.
+
+        Initializes the :attr:`identity_mapping_configuration` attribute with a new
+        :class:`IdentityMappingConfigurationSubmission` instance and returns it for further
+        configuration.
+
+        Returns:
+            IdentityMappingConfigurationSubmission: The identity mapping configuration.
+        """
+
+        self.identity_mapping_configuration = IdentityMappingConfigurationSubmission()
+        return self.identity_mapping_configuration
 
     def add_idp_type(self, provider_type: IdPProviderType) -> list[IdPProviderType]:
         """Link HRIS to External IdP of given type

@@ -13,7 +13,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import List, Optional
 
-from .common import CaseInsensitiveDict, OAAPropertyType, IdPProviderType, PROPERTY_NAME_REGEX, Tag
+from .common import CaseInsensitiveDict, IdentityMappingConfigurationSubmission, OAAPropertyType, IdPProviderType, PROPERTY_NAME_REGEX, Tag
 from .exceptions import OAATemplateException
 ###############################################################################
 # Custom IdP Provider
@@ -52,6 +52,7 @@ class CustomIdPProvider():
         users (dict[CustomIdPUser]): Dictionary of CustomIdPUser class instances
         groups (dict[CustomIdPGroup]): Dictionary of CustomIdPGroup class instances
         property_definitions (IdPPropertyDefinitions): Custom Property definitions for IdP instance
+        identity_mapping_configuration (IdentityMappingConfigurationSubmission): Identity mapping configuration, set via :meth:`set_identity_mapping_configuration`.
     """
 
     TEMPLATE="identity_provider"
@@ -66,6 +67,7 @@ class CustomIdPProvider():
         self.users = CaseInsensitiveDict()
         self.groups = CaseInsensitiveDict()
         self.apps = CaseInsensitiveDict()
+        self.identity_mapping_configuration: Optional[IdentityMappingConfigurationSubmission] = None
 
     def __str__(self) -> str:
         return f"Custom IdP Provider {self.name} - {self.idp_type}"
@@ -83,7 +85,25 @@ class CustomIdPProvider():
         payload['users'] = [user.to_dict() for user in self.users.values()]
         payload['groups'] = [group.to_dict() for group in self.groups.values()]
         payload['apps'] = [app.to_dict() for app in self.apps.values()]
+
+        if self.identity_mapping_configuration is not None:
+            payload['identity_mapping_configuration'] = self.identity_mapping_configuration.to_dict()
+
         return payload
+
+    def set_identity_mapping_configuration(self) -> IdentityMappingConfigurationSubmission:
+        """Create and set the identity mapping configuration.
+
+        Initializes the :attr:`identity_mapping_configuration` attribute with a new
+        :class:`IdentityMappingConfigurationSubmission` instance and returns it for further
+        configuration.
+
+        Returns:
+            IdentityMappingConfigurationSubmission: The identity mapping configuration.
+        """
+
+        self.identity_mapping_configuration = IdentityMappingConfigurationSubmission()
+        return self.identity_mapping_configuration
 
     def add_user(self, name: str, full_name: str = None, email: str = None, identity: str = None) -> CustomIdPUser:
         """ Add user to IdP

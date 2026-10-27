@@ -11,7 +11,12 @@ import pytest
 
 from generate_hris import GENERATED_HRIS_PAYLOAD, generate_hris
 
-from oaaclient.templates import HRISEmployee, HRISGroup, HRISProvider, OAAPropertyType, OAATemplateException
+from oaaclient.templates import (HRISEmployee, HRISGroup, HRISProvider,
+                                  IdentityMappingConfigurationSubmission,
+                                  IdentityMappingMode,
+                                  IdentityMappingProperty,
+                                  IdentityMappingType, OAAPropertyType,
+                                  OAATemplateException)
 
 def test_generate_hris():
     hris = generate_hris()
@@ -121,3 +126,67 @@ def test_hris_custom_properties():
 
     group_obj = HRISGroup("g01", "group01", "testGroup")
     group_obj.set_property("unset", "value2")
+
+
+def test_set_identity_mapping_configuration():
+    """Test that set_identity_mapping_configuration creates and returns the configuration object"""
+    hris = HRISProvider("mappingTest", "pytest", "https://hris.example.com")
+
+    assert hris.system.identity_mapping_configuration is None
+
+    config = hris.system.set_identity_mapping_configuration()
+
+    assert isinstance(config, IdentityMappingConfigurationSubmission)
+    assert hris.system.identity_mapping_configuration is config
+
+
+def test_set_identity_mapping_configuration_replaces_existing():
+    """Test that calling set_identity_mapping_configuration again replaces the previous one"""
+    hris = HRISProvider("mappingTest", "pytest", "https://hris.example.com")
+
+    config1 = hris.system.set_identity_mapping_configuration()
+    config1.use_email = True
+
+    config2 = hris.system.set_identity_mapping_configuration()
+
+    assert hris.system.identity_mapping_configuration is config2
+    assert config2.use_email is False
+
+
+def test_identity_mapping_in_payload():
+    """Test that identity mapping configuration is included in get_payload output under system"""
+    hris = HRISProvider("mappingTest", "pytest", "https://hris.example.com")
+
+    config = hris.system.set_identity_mapping_configuration()
+    config.use_email = True
+    mapping = config.add_mapping(
+        destination_datasource_type="okta",
+        destination_datasource_oaa_type="",
+        mapping_type=IdentityMappingType.EQUAL,
+        mapping_mode=IdentityMappingMode.USERS,
+    )
+    mapping.add_property_matcher(
+        source_property=IdentityMappingProperty.EMAIL,
+        destination_property=IdentityMappingProperty.EMAIL,
+    )
+
+    payload = hris.get_payload()
+
+    assert "identity_mapping_configuration" in payload["system"]
+    imc = payload["system"]["identity_mapping_configuration"]
+    assert imc["use_email"] is True
+    assert len(imc["mappings"]) == 1
+    m = imc["mappings"][0]
+    assert m["destination_datasource_type"] == "okta"
+    assert m["type"] == "EQUAL"
+    assert m["mode"] == "USERS"
+    assert m["property_matchers"] == [{"source_property": "EMAIL", "destination_property": "EMAIL"}]
+
+
+def test_no_identity_mapping_omitted_from_payload():
+    """Test that identity_mapping_configuration is absent from system payload when not set"""
+    hris = HRISProvider("noMappingTest", "pytest", "https://hris.example.com")
+
+    payload = hris.get_payload()
+
+    assert "identity_mapping_configuration" not in payload["system"]

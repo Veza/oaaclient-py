@@ -9,7 +9,10 @@ https://opensource.org/licenses/MIT.
 import pytest
 import json
 
-from oaaclient.templates import CustomIdPProvider, OAATemplateException
+from oaaclient.templates import (CustomIdPProvider,
+                                  IdentityMappingConfigurationSubmission,
+                                  IdentityMappingMode, IdentityMappingProperty,
+                                  IdentityMappingType, OAATemplateException)
 from generate_idp import generate_idp, GENERATED_IDP_PAYLOAD
 
 
@@ -195,3 +198,65 @@ TEST_CUSTOM_IDP_RESULT = """
   "apps": []
 }
 """
+
+
+def test_set_identity_mapping_configuration():
+    """Test that set_identity_mapping_configuration creates and returns the configuration object"""
+    idp = CustomIdPProvider("mappingTest", "pytest", "example.com")
+
+    assert idp.identity_mapping_configuration is None
+
+    config = idp.set_identity_mapping_configuration()
+
+    assert isinstance(config, IdentityMappingConfigurationSubmission)
+    assert idp.identity_mapping_configuration is config
+
+
+def test_set_identity_mapping_configuration_replaces_existing():
+    """Test that calling set_identity_mapping_configuration again replaces the previous one"""
+    idp = CustomIdPProvider("mappingTest", "pytest", "example.com")
+
+    config1 = idp.set_identity_mapping_configuration()
+    config1.use_email = True
+
+    config2 = idp.set_identity_mapping_configuration()
+
+    assert idp.identity_mapping_configuration is config2
+    assert config2.use_email is False
+
+
+def test_identity_mapping_in_payload():
+    """Test that identity mapping configuration is included in get_payload output"""
+    idp = CustomIdPProvider("mappingTest", "pytest", "example.com")
+
+    config = idp.set_identity_mapping_configuration()
+    config.use_email = True
+    mapping = config.add_mapping(
+        destination_datasource_type="okta",
+        destination_datasource_oaa_type="",
+        mapping_type=IdentityMappingType.EQUAL,
+        mapping_mode=IdentityMappingMode.USERS,
+    )
+    mapping.add_property_matcher(
+        source_property=IdentityMappingProperty.EMAIL,
+        destination_property=IdentityMappingProperty.EMAIL,
+    )
+
+    payload = idp.get_payload()
+
+    assert "identity_mapping_configuration" in payload
+    imc = payload["identity_mapping_configuration"]
+    assert imc["use_email"] is True
+    assert len(imc["mappings"]) == 1
+    m = imc["mappings"][0]
+    assert m["destination_datasource_type"] == "okta"
+    assert m["type"] == "EQUAL"
+    assert m["mode"] == "USERS"
+    assert m["property_matchers"] == [{"source_property": "EMAIL", "destination_property": "EMAIL"}]
+
+
+def test_no_identity_mapping_omitted_from_payload():
+    """Test that identity_mapping_configuration is absent from payload when not set"""
+    idp = CustomIdPProvider("noMappingTest", "pytest", "example.com")
+
+    assert "identity_mapping_configuration" not in idp.get_payload()

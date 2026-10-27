@@ -15,12 +15,14 @@ import uuid
 import pytest
 from generate_app import generate_app
 from generate_app_id_mapping import generate_app_id_mapping
+from generate_host import generate_host
 from generate_hris import generate_hris
 from generate_idp import generate_idp
 from generate_secret_store import generate_secret_store
 
 import oaaclient.utils as utils
 from oaaclient.client import OAAClient, OAAClientError
+from oaaclient.templates import HostGranteeType, HostProvider, OAAPermission
 
 # set the timeout for the push tests, if the the datasource does not parse
 TEST_TIMEOUT = os.getenv("OAA_PUSH_TIMEOUT", 300)
@@ -258,6 +260,84 @@ def test_hris_payload_push(veza_con, hris_provider):
 
     while True:
         data_source = veza_con.get_data_source(data_source_name, provider_id=hris_provider["id"])
+        if data_source["status"] == "SUCCESS":
+            break
+        elif FAILURE_REGEX.match(data_source["status"]):
+            print(data_source)
+            assert False, "Datasource parsing failure"
+        else:
+            time.sleep(4)
+
+    return
+
+
+@pytest.mark.skipif(not os.getenv("PYTEST_VEZA_HOST"), reason="Test host is not configured")
+@pytest.mark.timeout(TEST_TIMEOUT)
+def test_host_payload_push(veza_con, host_provider):
+    """ Centralized submission: the environment and every host in it in one payload """
+
+    host = generate_host()
+
+    data_source_name = os.environ.get('PYTEST_CURRENT_TEST').replace("/", "-")
+    response = veza_con.push_application(host_provider['name'],
+                                           data_source_name=data_source_name,
+                                           application_object=host
+                                           )
+    if not response:
+        assert False
+
+    # print out any warnings from the push for debugging purposes, warnings are not a failure, warnings will include
+    # being unable to find fake identities
+    if response.get("warnings", None):
+        print("Push warnings:")
+        for e in response["warnings"]:
+            print(f"  - {e}")
+
+    while True:
+        data_source = veza_con.get_data_source(data_source_name, provider_id=host_provider["id"])
+        if data_source["status"] == "SUCCESS":
+            break
+        elif FAILURE_REGEX.match(data_source["status"]):
+            print(data_source)
+            assert False, "Datasource parsing failure"
+        else:
+            time.sleep(4)
+
+    return
+
+
+@pytest.mark.skipif(not os.getenv("PYTEST_VEZA_HOST"), reason="Test host is not configured")
+@pytest.mark.timeout(TEST_TIMEOUT)
+def test_host_agent_payload_push(veza_con, host_provider):
+    """ Per-host agent submission: no environment of its own, the host names one by ID instead
+
+    The environment is supplied by a different data source and may not have been pushed yet, so an
+    environment_id that does not resolve is accepted with a warning rather than rejected.
+    """
+
+    host = HostProvider(host_type="linux")
+    host.add_privilege(name="ssh_login", privilege_type=[OAAPermission.NonData], description="May open an interactive session")
+
+    web_02 = host.add_host(name="web-02.prod.example.com", unique_id="web-02", environment_id="prod-linux-fleet")
+    web_02.platform = "linux"
+    web_02.add_user(name="root", unique_id="root", is_local=True)
+    web_02.add_grant(principal_id="root", grantee_type=HostGranteeType.USER, is_local=True, privileges=["ssh_login"], apply_to_host=True)
+
+    data_source_name = os.environ.get('PYTEST_CURRENT_TEST').replace("/", "-")
+    response = veza_con.push_application(host_provider['name'],
+                                           data_source_name=data_source_name,
+                                           application_object=host
+                                           )
+    if not response:
+        assert False
+
+    if response.get("warnings", None):
+        print("Push warnings:")
+        for e in response["warnings"]:
+            print(f"  - {e}")
+
+    while True:
+        data_source = veza_con.get_data_source(data_source_name, provider_id=host_provider["id"])
         if data_source["status"] == "SUCCESS":
             break
         elif FAILURE_REGEX.match(data_source["status"]):

@@ -10,13 +10,29 @@ import logging
 import sys
 
 from oaaclient.client import OAAClient, OAAClientError
-from oaaclient.templates import CustomIdPProvider, OAAPropertyType, IdPProviderType, IdPUserIdentityType
+from oaaclient.templates import (CustomIdPProvider, IdentityMappingMode,
+                                  IdentityMappingProperty,
+                                  IdentityMappingType, IdPProviderType,
+                                  IdPUserIdentityType, OAAPropertyType)
 
 
 def generate_idp():
     """ generates a complete OAA custom IDP app """
 
     idp = CustomIdPProvider("Pytest IdP", idp_type="pytest", domain="example.com", description="Pytest Test IdP")
+
+    identity_mapping = idp.set_identity_mapping_configuration()
+    identity_mapping.use_email = True
+    mapping = identity_mapping.add_mapping(
+        destination_datasource_type="OKTA",
+        destination_datasource_oaa_type="",
+        mapping_type=IdentityMappingType.EQUAL,
+        mapping_mode=IdentityMappingMode.USERS,
+    )
+    mapping.add_property_matcher(
+        source_property=IdentityMappingProperty.EMAIL,
+        destination_property=IdentityMappingProperty.EMAIL,
+    )
 
     idp.property_definitions.define_user_property("contractor", OAAPropertyType.BOOLEAN)
     idp.property_definitions.define_user_property("parking_spaces", OAAPropertyType.NUMBER)
@@ -131,6 +147,22 @@ if __name__ == "__main__":
 
 GENERATED_IDP_PAYLOAD = """
 {
+  "identity_mapping_configuration": {
+    "use_email": true,
+    "mappings": [
+      {
+        "destination_datasource_type": "OKTA",
+        "type": "EQUAL",
+        "mode": "USERS",
+        "property_matchers": [
+          {
+            "source_property": "EMAIL",
+            "destination_property": "EMAIL"
+          }
+        ]
+      }
+    ]
+  },
   "custom_property_definition": {
     "domain_properties": {
       "region": "STRING"

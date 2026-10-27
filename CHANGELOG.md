@@ -1,5 +1,39 @@
 # OAA Client Change Log
 
+## v1.2.1
+* Add support for the Host template via the new `oaaclient.templates.host` module. `HostProvider` models host machine authorization — environment, hosts, users, groups, credentials, resources, privilege definitions, and grants — for both the centralized-collector and per-host-agent submission shapes.
+  ```python
+  from oaaclient.templates import HostProvider
+
+  host_provider = HostProvider(host_type="linux")
+  host_provider.add_environment(unique_id="prod-linux-fleet", name="Production Linux Fleet")
+  host = host_provider.add_host(name="web-01.prod.example.com", unique_id="web-01")
+  host.platform = "linux"
+  host.version = "Ubuntu 22.04.4 LTS"
+  host.ip_address = "10.0.1.11"
+  host.add_user(name="root", unique_id="root", is_local=True)
+  ```
+* Add identity mapping support to the Custom HRIS and IdP templates. Call `set_identity_mapping_configuration()` to create an `IdentityMappingConfigurationSubmission` and add mappings to it. The configuration is included in the payload only when set.
+  ```python
+  # HRIS: set on the system
+  identity_mapping = hris.system.set_identity_mapping_configuration()
+
+  # Custom IdP: set on the provider
+  identity_mapping = idp.set_identity_mapping_configuration()
+
+  identity_mapping.use_email = True
+  mapping = identity_mapping.add_mapping(
+      destination_datasource_type="OKTA",
+      mapping_type=IdentityMappingType.EQUAL,
+      mapping_mode=IdentityMappingMode.USERS,
+  )
+  mapping.add_property_matcher(
+      source_property=IdentityMappingProperty.EMAIL,
+      destination_property=IdentityMappingProperty.EMAIL,
+  )
+  ```
+* OAAClient now requires Python 3.11 or higher
+
 ## v1.2.0
 * OAAClient `templates` module has been refactored into sub modules to improve readability and maintainability. Backwards compatibility has been maintained for all existing imports.
   * Template components can now be imported directly from sub-modules based on template or common purpose

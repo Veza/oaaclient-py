@@ -11,7 +11,10 @@ import logging
 import sys
 
 from oaaclient.client import OAAClient, OAAClientError
-from oaaclient.templates import HRISProvider, OAAPropertyType, IdPProviderType
+from oaaclient.templates import (HRISProvider, IdentityMappingMode,
+                                  IdentityMappingProperty,
+                                  IdentityMappingType, IdPProviderType,
+                                  OAAPropertyType)
 
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(thread)d %(message)s', level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -23,6 +26,19 @@ def generate_hris() -> HRISProvider:
     hris = HRISProvider("Pytest HRIS", hris_type="PyHRIS", url="example.com")
     hris.system.add_idp_type(IdPProviderType.OKTA)
     hris.system.add_idp_type(IdPProviderType.AZURE_AD)
+
+    identity_mapping = hris.system.set_identity_mapping_configuration()
+    identity_mapping.use_email = True
+    mapping = identity_mapping.add_mapping(
+        destination_datasource_type="OKTA",
+        destination_datasource_oaa_type="",
+        mapping_type=IdentityMappingType.EQUAL,
+        mapping_mode=IdentityMappingMode.USERS,
+    )
+    mapping.add_property_matcher(
+        source_property=IdentityMappingProperty.EMAIL,
+        destination_property=IdentityMappingProperty.EMAIL,
+    )
 
     hris.property_definitions.define_employee_property("nickname", OAAPropertyType.STRING)
     hris.property_definitions.define_employee_property("has_keys", OAAPropertyType.BOOLEAN)
@@ -133,7 +149,23 @@ GENERATED_HRIS_PAYLOAD = """
     "id": "Pytest HRIS",
     "name": "Pytest HRIS",
     "url": "example.com",
-    "idp_providers": ["okta", "azure_ad"]
+    "idp_providers": ["okta", "azure_ad"],
+    "identity_mapping_configuration": {
+      "use_email": true,
+      "mappings": [
+        {
+          "destination_datasource_type": "OKTA",
+          "type": "EQUAL",
+          "mode": "USERS",
+          "property_matchers": [
+            {
+              "source_property": "EMAIL",
+              "destination_property": "EMAIL"
+            }
+          ]
+        }
+      ]
+    }
   },
   "employees": [
     {
