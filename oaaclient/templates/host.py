@@ -10,6 +10,7 @@ https://opensource.org/licenses/MIT.
 
 from __future__ import annotations
 
+import json
 import re
 from enum import Enum
 from typing import List, Optional
@@ -38,6 +39,26 @@ class HostIdentityType(str, Enum):
 
     def __repr__(self) -> str:
         return f'{self.__class__.__name__}.{self.name}'
+
+
+def _scope_key(apply_to_host: bool, resource_keys: List[str]) -> str:
+    """Identify what a grant applies to, so that grants on different things are kept apart.
+
+    Where neither `apply_to_host` nor `resources` is given the privileges apply to the host.
+
+    Args:
+        apply_to_host (bool): Whether the privileges apply to the host itself, or None where the caller did not say.
+        resource_keys (list[str]): The `resource_type.id` keys of the resources the privileges apply to.
+
+    Returns:
+        str: A key equal for two grants that apply to the same things, and different otherwise.
+    """
+
+    targets = set(resource_keys)
+    if apply_to_host or not resource_keys:
+        targets.add("")
+
+    return json.dumps(sorted(targets))
 
 
 class HostProvider():
@@ -260,7 +281,7 @@ class HostNode():
         groups (dict[HostGroup]): Dictionary of HostGroup instances
         credentials (dict[HostCredential]): Dictionary of HostCredential instances
         resources (dict[HostResource]): Dictionary of HostResource instances, keyed by `resource_type.id`
-        identity_to_privileges (dict): Dictionary of grants, keyed by principal ID
+        identity_to_privileges (dict): Dictionary of grants, one per principal per set of things the privileges apply to
 
     Raises:
         ValueError: name or unique_id is empty.
@@ -483,20 +504,25 @@ class HostNode():
         """Grant privileges to a principal on this host.
 
         Records which privileges a user or group holds, on the host itself, on resources inside
-        it, or both. Calling this again for the same `principal_id` and `grantee_type` adds to the
-        existing grant rather than creating a second one; the same id used for both a user and a
-        group grant produces two separate grants.
+        it, or both.
+
+        Calling this again for the same `principal_id` and `grantee_type` adds to the existing
+        grant where the call applies to the same things, and creates a second grant where it does
+        not. A principal holding `sudo` on one command and `login` on the host holds two
+        differently scoped sets of privileges, and they stay apart; a second call naming the same
+        command adds to the first. The same id used for both a user and a group grant likewise
+        produces two separate grants.
 
         Args:
             principal_id (str): ID of the user or group holding the privileges. Must be declared among this host's users or groups when `is_local` is True.
             grantee_type (HostGranteeType): Whether `principal_id` names a user or a group.
             is_local (bool, optional): Whether the principal is declared on this host. False for a directory-backed principal, whose identity provider's connector draws the edge from it. Defaults to True.
             privileges (list, optional): Privilege names granted, each of which must have been defined on the provider with `HostProvider.add_privilege()`. An entry may be a bare name (str), or a dict carrying a `name` key where something needs to be said about how the privilege is held, such as `{"name": "sudo", "no_password": True}`. Defaults to None.
-            apply_to_host (bool, optional): Whether these privileges apply to the host itself. Defaults to None.
+            apply_to_host (bool, optional): Whether these privileges apply to the host itself. Defaults to None, in which case they apply to the host when no resources are given, and to the resources alone when some are.
             resources (list, optional): Resources inside the host these privileges also apply to. Accepts `HostResource` instances or "resource_type.id" strings. Defaults to None.
 
         Raises:
-            OAATemplateException: principal_id is empty, grantee_type is not a HostGranteeType, a privileges entry is not a name or an object carrying one, or a resources entry is not the expected type.
+            OAATemplateException: principal_id is empty, grantee_type is not a HostGranteeType, a privileges entry is not a name or an object carrying one, or a resources entry is empty or not the expected type.
         """
 
         if not principal_id:
@@ -529,11 +555,13 @@ class HostNode():
             if isinstance(resource, HostResource):
                 resource_keys.append(resource.resource_key)
             elif isinstance(resource, str):
+                if not resource:
+                    raise OAATemplateException("resources entries cannot be empty")
                 resource_keys.append(resource)
             else:
                 raise OAATemplateException("resources entries must be HostResource instances or str of 'resource_type.id'")
 
-        grant_key = f"{grantee_type.value}:{principal_id}"
+        grant_key = f"{grantee_type.value}:{principal_id}:{_scope_key(apply_to_host, resource_keys)}"
         if grant_key in self.identity_to_privileges:
             grant = self.identity_to_privileges[grant_key]
             for privilege in privileges:

@@ -30,6 +30,8 @@ def generate_host() -> HostProvider:
 
     host_provider.add_privilege(name="sudo_all", privilege_type=[OAAPermission.DataRead, OAAPermission.DataWrite], description="Full sudo access")
     host_provider.add_privilege(name="service_restart", privilege_type=[OAAPermission.MetadataWrite])
+    host_provider.add_privilege(name="sudo_command", privilege_type=[OAAPermission.NonData], description="Sudo access to particular commands")
+    host_provider.add_privilege(name="login", privilege_type=[OAAPermission.NonData])
 
     host = host_provider.add_host(unique_id="web-01", name="web-01.prod.example.com")
     host.platform = "linux"
@@ -59,11 +61,16 @@ def generate_host() -> HostProvider:
     nginx = host.add_resource(unique_id="nginx", name="nginx", resource_type="service")
     nginx.set_property("port", 443)
 
+    systemctl = host.add_resource(unique_id="systemctl_restart_nginx", name="/usr/bin/systemctl restart nginx", resource_type="command")
+
     host.add_grant(principal_id="root", grantee_type=HostGranteeType.USER, is_local=True, privileges=["sudo_all"], apply_to_host=True)
     host.add_grant(principal_id="svc_deploy", grantee_type=HostGranteeType.USER, is_local=True, privileges=[{"name": "service_restart", "no_password": True}], resources=[nginx])
     # second call for the same principal merges into the existing grant instead of creating a new one
     host.add_grant(principal_id="svc_deploy", grantee_type=HostGranteeType.USER, is_local=True, resources=["service.nginx"])
     host.add_grant(principal_id="admins", grantee_type=HostGranteeType.GROUP, is_local=False, privileges=["sudo_all"], apply_to_host=True)
+    host.add_grant(principal_id="jsmith", grantee_type=HostGranteeType.USER, is_local=False, privileges=["sudo_command"], resources=[systemctl])
+    # a different scope for the same principal, so this is a second grant rather than an addition to the first
+    host.add_grant(principal_id="jsmith", grantee_type=HostGranteeType.USER, is_local=False, privileges=["login"], apply_to_host=True)
 
     return host_provider
 
@@ -130,6 +137,19 @@ GENERATED_HOST_PAYLOAD = """
       "name": "service_restart",
       "privilege_type": [
         "MetadataWrite"
+      ]
+    },
+    {
+      "name": "sudo_command",
+      "description": "Sudo access to particular commands",
+      "privilege_type": [
+        "NonData"
+      ]
+    },
+    {
+      "name": "login",
+      "privilege_type": [
+        "NonData"
       ]
     }
   ],
@@ -241,6 +261,11 @@ GENERATED_HOST_PAYLOAD = """
           "custom_properties": {
             "port": 443
           }
+        },
+        {
+          "id": "systemctl_restart_nginx",
+          "name": "/usr/bin/systemctl restart nginx",
+          "resource_type": "command"
         }
       ],
       "identity_to_privileges": [
@@ -273,6 +298,26 @@ GENERATED_HOST_PAYLOAD = """
           "is_local": false,
           "privileges": [
             "sudo_all"
+          ],
+          "apply_to_host": true
+        },
+        {
+          "id": "jsmith",
+          "grantee_type": "user",
+          "is_local": false,
+          "privileges": [
+            "sudo_command"
+          ],
+          "resources": [
+            "command.systemctl_restart_nginx"
+          ]
+        },
+        {
+          "id": "jsmith",
+          "grantee_type": "user",
+          "is_local": false,
+          "privileges": [
+            "login"
           ],
           "apply_to_host": true
         }

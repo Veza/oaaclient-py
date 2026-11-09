@@ -1,5 +1,8 @@
 # OAA Client Change Log
 
+## v1.2.2
+* Fix `HostNode.add_grant()` merging a principal's host-level and resource-level grants into one. Grants are now keyed by target as well as principal, so grants on different targets stay separate. `add_grant()` now also rejects an empty string in `resources`.
+
 ## v1.2.1
 * Add support for the Host template via the new `oaaclient.templates.host` module. `HostProvider` models host machine authorization — environment, hosts, users, groups, credentials, resources, privilege definitions, and grants — for both the centralized-collector and per-host-agent submission shapes.
   ```python

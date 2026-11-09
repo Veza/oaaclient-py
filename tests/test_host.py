@@ -36,22 +36,122 @@ def test_single_host_submission():
     assert payload["hosts"] == [{"id": "web-02", "name": "web-02", "environment_id": "prod-linux-fleet"}]
 
 
-def test_host_grant_merges_by_principal():
-    """ Calling add_grant again for the same principal merges into the existing grant rather than duplicating it. """
+def test_host_grant_merges_same_scope():
+    """ Calling add_grant again for the same principal and the same target merges into the existing grant. """
+
+    host_provider = HostProvider(host_type="linux")
+    host = host_provider.add_host(name="web-01", unique_id="web-01")
+
+    host.add_grant(principal_id="root", grantee_type=HostGranteeType.USER, privileges=["sudo"])
+    host.add_grant(principal_id="root", grantee_type=HostGranteeType.USER, privileges=["sudo"])
+    host.add_grant(principal_id="root", grantee_type=HostGranteeType.USER, privileges=["ssh-login"], apply_to_host=True)
+
+    assert len(host.identity_to_privileges) == 1
+    grant = list(host.identity_to_privileges.values())[0]
+    assert grant["privileges"] == ["sudo", "ssh-login"]
+    assert grant["resources"] == []
+    assert grant["apply_to_host"] is True
+
+
+def test_host_grant_merges_same_resource_scope():
+    """ Two calls naming the same resource merge, whichever way each one spells "not the host". """
 
     host_provider = HostProvider(host_type="linux")
     host = host_provider.add_host(name="web-01", unique_id="web-01")
     resource = host.add_resource(name="nginx", unique_id="nginx", resource_type="service")
 
-    host.add_grant(principal_id="root", grantee_type=HostGranteeType.USER, privileges=["sudo"])
-    host.add_grant(principal_id="root", grantee_type=HostGranteeType.USER, privileges=["sudo"], resources=[resource])
-    host.add_grant(principal_id="root", grantee_type=HostGranteeType.USER, apply_to_host=True)
+    host.add_grant(principal_id="svc_deploy", grantee_type=HostGranteeType.USER, privileges=["restart"], resources=[resource])
+    host.add_grant(principal_id="svc_deploy", grantee_type=HostGranteeType.USER, privileges=["reload"], resources=["service.nginx"], apply_to_host=False)
 
     assert len(host.identity_to_privileges) == 1
-    grant = host.identity_to_privileges["user:root"]
-    assert grant["privileges"] == ["sudo"]
+    grant = list(host.identity_to_privileges.values())[0]
+    assert grant["privileges"] == ["restart", "reload"]
     assert grant["resources"] == ["service.nginx"]
-    assert grant["apply_to_host"] is True
+
+
+def test_host_grant_keeps_scopes_separate():
+    """Grants for one principal on different targets stay separate rather than pooling into one.
+
+    A privilege has a scope: sudo on two named commands is not sudo on the host. Merging them
+    would publish the command-scoped privilege as one held over the whole host.
+    """
+
+    host_provider = HostProvider(host_type="linux")
+    host = host_provider.add_host(name="web-01", unique_id="web-01")
+    restart = host.add_resource(name="/usr/bin/systemctl restart postgresql", unique_id="/usr/bin/systemctl restart postgresql", resource_type="command")
+    status = host.add_resource(name="/usr/bin/systemctl status postgresql", unique_id="/usr/bin/systemctl status postgresql", resource_type="command")
+
+    host.add_grant(principal_id="alice", grantee_type=HostGranteeType.USER, privileges=[{"name": "sudo-command", "runas": ["ALL"]}], apply_to_host=False, resources=[restart, status])
+    host.add_grant(principal_id="alice", grantee_type=HostGranteeType.USER, privileges=["login"], apply_to_host=True)
+
+    assert len(host.identity_to_privileges) == 2
+
+    grants = list(host.identity_to_privileges.values())
+    sudo_grant = next(grant for grant in grants if grant["resources"])
+    login_grant = next(grant for grant in grants if not grant["resources"])
+
+    assert sudo_grant["privileges"] == [{"name": "sudo-command", "runas": ["ALL"]}]
+    assert sudo_grant["apply_to_host"] is False
+    assert sudo_grant["resources"] == ["command./usr/bin/systemctl restart postgresql", "command./usr/bin/systemctl status postgresql"]
+
+    assert login_grant["privileges"] == ["login"]
+    assert login_grant["apply_to_host"] is True
+    assert login_grant["resources"] == []
+
+
+def test_host_grant_naming_no_target_applies_to_host():
+    """A grant naming no target applies to the host, so it shares a scope with one that says so.
+
+    Where neither apply_to_host nor resources is given the privileges apply to the host, so these
+    are the same scope spelled two ways and must not become two grants.
+    """
+
+    host_provider = HostProvider(host_type="linux")
+    host = host_provider.add_host(name="web-01", unique_id="web-01")
+
+    host.add_grant(principal_id="root", grantee_type=HostGranteeType.USER, privileges=["sudo"])
+    host.add_grant(principal_id="root", grantee_type=HostGranteeType.USER, privileges=["ssh-login"], apply_to_host=True)
+
+    assert len(host.identity_to_privileges) == 1
+    grant = list(host.identity_to_privileges.values())[0]
+    assert grant["privileges"] == ["sudo", "ssh-login"]
+
+
+def test_host_grant_scope_is_order_independent():
+    """ The same resources named in a different order are the same scope. """
+
+    host_provider = HostProvider(host_type="linux")
+    host = host_provider.add_host(name="web-01", unique_id="web-01")
+
+    host.add_grant(principal_id="alice", grantee_type=HostGranteeType.USER, privileges=["restart"], resources=["service.nginx", "service.postgresql"])
+    host.add_grant(principal_id="alice", grantee_type=HostGranteeType.USER, privileges=["reload"], resources=["service.postgresql", "service.nginx"])
+
+    assert len(host.identity_to_privileges) == 1
+    grant = list(host.identity_to_privileges.values())[0]
+    assert grant["privileges"] == ["restart", "reload"]
+    assert grant["resources"] == ["service.nginx", "service.postgresql"]
+
+
+def test_host_grant_separate_scopes_in_payload():
+    """ Separately scoped grants reach the payload as separate entries. """
+
+    host_provider = HostProvider(host_type="linux")
+    host_provider.add_privilege(name="sudo-command", privilege_type=[OAAPermission.NonData])
+    host_provider.add_privilege(name="login", privilege_type=[OAAPermission.NonData])
+    host_provider.add_environment(unique_id="prod", name="Production")
+    host = host_provider.add_host(name="web-01", unique_id="web-01")
+    host.add_user(name="alice", unique_id="alice")
+    rsync = host.add_resource(name="/usr/bin/rsync", unique_id="rsync", resource_type="command")
+
+    host.add_grant(principal_id="alice", grantee_type=HostGranteeType.USER, privileges=["sudo-command"], resources=[rsync])
+    host.add_grant(principal_id="alice", grantee_type=HostGranteeType.USER, privileges=["login"], apply_to_host=True)
+
+    grants = host_provider.get_payload()["hosts"][0]["identity_to_privileges"]
+
+    assert grants == [
+        {"id": "alice", "grantee_type": "user", "is_local": True, "privileges": ["sudo-command"], "resources": ["command.rsync"]},
+        {"id": "alice", "grantee_type": "user", "is_local": True, "privileges": ["login"], "apply_to_host": True},
+    ]
 
 
 def test_host_grant_keeps_grantee_types_separate():
@@ -64,8 +164,9 @@ def test_host_grant_keeps_grantee_types_separate():
     host.add_grant(principal_id="ops", grantee_type=HostGranteeType.GROUP, privileges=["ssh-login"])
 
     assert len(host.identity_to_privileges) == 2
-    user_grant = host.identity_to_privileges["user:ops"]
-    group_grant = host.identity_to_privileges["group:ops"]
+    grants = list(host.identity_to_privileges.values())
+    user_grant = next(grant for grant in grants if grant["grantee_type"] == HostGranteeType.USER)
+    group_grant = next(grant for grant in grants if grant["grantee_type"] == HostGranteeType.GROUP)
     assert user_grant["privileges"] == ["sudo"]
     assert group_grant["privileges"] == ["ssh-login"]
 
@@ -199,6 +300,10 @@ def test_host_exceptions():
     with pytest.raises(OAATemplateException) as e:
         host.add_grant(principal_id="root", grantee_type=HostGranteeType.USER, resources=[1])
     assert "resources entries must be" in e.value.message
+
+    with pytest.raises(OAATemplateException) as e:
+        host.add_grant(principal_id="root", grantee_type=HostGranteeType.USER, resources=[""])
+    assert e.value.message == "resources entries cannot be empty"
 
     with pytest.raises(OAATemplateException) as e:
         host.add_grant(principal_id="root", grantee_type=HostGranteeType.USER, privileges=[{"no_password": True}])
