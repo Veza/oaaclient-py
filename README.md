@@ -68,6 +68,26 @@ veza_con.push_application(provider, data_source_name, application_object=custom_
 
 For more examples see the [samples directory](https://github.com/Veza/oaaclient-py/tree/main/samples).
 
+## OAuth2 Authentication
+
+As an alternative to an API key, `OAAClient` can authenticate with a Veza OAuth2 client. Tokens are requested and refreshed automatically.
+
+```python
+from oaaclient.auth import ClientCredentialsConfig, JWTBearerConfig
+from oaaclient.client import OAAClient
+
+# client ID and secret
+veza_con = OAAClient(url, oauth_config=ClientCredentialsConfig(client_id="...", client_secret="..."))
+
+# signed JWT assertion (requires `pip install oaaclient[jwt]`)
+veza_con = OAAClient(url, oauth_config=JWTBearerConfig(client_id="...", private_key_path="key.pem"))
+
+# or the PEM key as a base64 string, e.g. from a secret store
+veza_con = OAAClient(url, oauth_config=JWTBearerConfig(client_id="...", private_key_base64=encoded_key))
+```
+
+With no arguments, the client reads `VEZA_OAUTH_CLIENT_ID` plus either `VEZA_OAUTH_CLIENT_SECRET`, `VEZA_OAUTH_PRIVATE_KEY_PATH` or `VEZA_OAUTH_PRIVATE_KEY_BASE64` (the base64 encoded PEM key, e.g. `base64 < key.pem | tr -d '\n'`) (optional: `VEZA_OAUTH_KEY_ID`, `VEZA_OAUTH_PRIVATE_KEY_PASSWORD` for an encrypted key, `VEZA_OAUTH_SCOPE`, `VEZA_OAUTH_TOKEN_URL` which must be https). An API key, when provided, always takes precedence (a warning is logged if both are set in the environment). JWT keys are loaded and validated when the config is created, a bad key raises `ValueError`. For the command line tool, the `auth.json` file can contain an `oauth` object instead of `token`, e.g. `{"host": "...", "oauth": {"client_id": "...", "client_secret": "..."}}`.
+
 ## Command Line Use
 
 The oaaclient can also be used as a command line tool for pushing completed OAA payloads to Veza for testing and debugging, without needing to make the API requests "by hand."

@@ -22,6 +22,7 @@ import platform
 import re
 import socket
 import sys
+import time
 import urllib.parse
 from datetime import datetime
 from enum import Enum
@@ -33,6 +34,7 @@ from urllib3.util.retry import Retry
 
 from oaaclient import __version__ as OAACLIENT_VERSION
 import oaaclient.utils as oaautils
+from oaaclient.auth import ENV_CLIENT_ID as OAUTH_ENV_CLIENT_ID, OAuthConfig
 from oaaclient.templates import CustomApplication, CustomIdPProvider, EntityEnrichment
 
 PROVIDER_ICON_MAX_SIZE = 64_000
@@ -84,15 +86,20 @@ class OAAClient():
     Connection url and API key can be automatically loaded from OS environment values if set. To utilize environment variables
     initialize OAAClient without providing a URL or API key value and set the `VEZA_URL` and `VEZA_API_KEY` OS environment variables.
 
+    OAuth2 can be used instead of an API key by passing an `oaaclient.auth.OAuthConfig` (`ClientCredentialsConfig` or
+    `JWTBearerConfig`) as `oauth_config`, or by setting the `VEZA_OAUTH_*` environment variables (see `OAuthConfig.from_env`).
+    Credential precedence: explicit `api_key`/`token`, explicit `oauth_config`, `VEZA_API_KEY`, `VEZA_OAUTH_*`.
+
     Args:
         url (str, optional): URL for Veza instance.
         api_key (str, optional): Veza API key.
         username (str, optional): Not used (legacy). Defaults to None.
         token (str, optional): Legacy parameter name for API key. Defaults to None.
+        oauth_config (OAuthConfig, optional): OAuth2 configuration to use instead of an API key. Cannot be combined with `api_key` or `token`.
 
     Attributes:
         url (str): URL of the Veza instance to connect to
-        api_key (str): Veza API key
+        api_key (str): Veza API key, or the current OAuth access token when using OAuth
         enable_compression (bool): Enable or disable compression of the OAA payload during push, defaults to enabled (True)
 
     Raises:
@@ -125,7 +132,7 @@ class OAAClient():
     # Default size to split payload into for multipart upload
     DEFAULT_PART_SIZE = 50_000_000
 
-    def __init__(self, url:str = None, api_key: str = None, username: str = None, token: str = None):
+    def __init__(self, url:str = None, api_key: str = None, username: str = None, token: str = None, oauth_config: OAuthConfig = None):
 
         if not url and "VEZA_URL" in os.environ:
             url = os.getenv("VEZA_URL", "")
@@ -147,18 +154,34 @@ class OAAClient():
 
         self.username = username
 
-        if api_key:
-            self.api_key = api_key
-        elif token:
-            self.api_key = token
-        elif "VEZA_API_KEY" in os.environ:
+        self._oauth = None
+        self._token_expires_at = None
+        self._token_refresh_margin = self.TOKEN_REFRESH_MARGIN
+
+        explicit_key = api_key or token
+        if explicit_key and oauth_config:
+            raise ValueError("Provide either an API key or oauth_config, not both")
+
+        if explicit_key:
+            self.api_key = explicit_key
+        elif oauth_config:
+            self._oauth = oauth_config
+        elif os.getenv("VEZA_API_KEY"):
             self.api_key = os.getenv("VEZA_API_KEY", "")
+            if os.getenv(OAUTH_ENV_CLIENT_ID):
+                log.warning(f"Both VEZA_API_KEY and {OAUTH_ENV_CLIENT_ID} are set, using VEZA_API_KEY. Unset it to use OAuth.")
         else:
-            raise ValueError("Must provide Veza API key")
+            self._oauth = OAuthConfig.from_env()
+            if not self._oauth:
+                raise ValueError("Must provide Veza API key or OAuth configuration")
+
+        if self._oauth:
+            # populated by _fetch_oauth_token() once the HTTP session is ready
+            self.api_key = None
 
         if not self.url:
             raise OAAClientError("MISSING_URL", "URL cannot be None")
-        if not self.api_key:
+        if not self._oauth and not self.api_key:
             raise OAAClientError("MISSING_AUTH", "API key cannot be None")
 
         # enable payload compression by default, connection object property can be set to False to disable
@@ -188,7 +211,22 @@ class OAAClient():
         self._http_adapter.mount("https://", adapter)
         self._http_adapter.mount("http://", adapter)
 
+        # token requests are safe to repeat, unlike the general POST calls, so they get their own session
+        # that also retries POST on the same status codes. urllib3 does not retry POST by default.
+        self._token_session = None
+        if self._oauth:
+            token_retry_policy = OAARetry(backoff_max=self.DEFAULT_RETRY_MAX_BACKOFF, total=retry_count, backoff_factor=self.DEFAULT_RETRY_BACKOFF_FACTOR,
+                                          status_forcelist=[429, 500, 502, 503, 504], allowed_methods=frozenset({"HEAD", "GET", "PUT", "DELETE", "OPTIONS", "TRACE", "POST"}))
+            token_adapter = HTTPAdapter(max_retries=token_retry_policy)
+            self._token_session = requests.Session()
+            self._token_session.mount("https://", token_adapter)
+            self._token_session.mount("http://", token_adapter)
+
         self.update_user_agent()
+
+        # OAuth: obtain the first access token so bad credentials fail early
+        if self._oauth:
+            self._fetch_oauth_token()
 
         # test connection
         self._test_connection()
@@ -307,17 +345,48 @@ class OAAClient():
 
         return None
 
-    def update_provisioning_status(self, provider_id: str, provisioning: bool) -> None:
+    def update_provisioning_status(self, provider_id: str, provisioning: bool) -> dict:
         """ Update HRIS provider to be a system of record for Lifecycle Management (LCM).
 
         Args:
             provider_id (str): unique ID of existing provider
             provisioning (bool): set to True to enable LCM, False to disable
 
+        Raises:
+            ValueError: If provider_id is not a valid non-empty string
+            OAAResponseError: API returned an error
+
+        Returns:
+            dict: API response, the updated provider
         """
 
-        payload = {"provisioning": provisioning}
-        response = self.api_patch(f"/api/v1/providers/custom/{provider_id}", data=payload)
+        return self.patch_provider(provider_id, {"provisioning": provisioning})
+
+    def patch_provider(self, provider_id: str, parameters: dict) -> dict:
+        """Patch an existing provider.
+
+        Updates only the provided parameters of an existing custom provider.
+
+        Args:
+            provider_id (str): unique ID of existing provider
+            parameters (dict): dictionary of provider parameters to update
+
+        Raises:
+            ValueError: If provider_id is not a non-empty string or parameters is not a non-empty dictionary
+
+        Returns:
+            dict: API response, the updated provider
+        """
+        if not isinstance(provider_id, str) or not provider_id.strip():
+            raise ValueError("provider_id must be a non-empty string")
+
+        if any(c in provider_id for c in "/?#:\\") or provider_id != provider_id.strip():
+            raise ValueError("provider_id contains invalid characters")
+
+        if not isinstance(parameters, dict) or not parameters:
+            raise ValueError("parameters must be a non-empty dictionary")
+
+        response = self.api_patch(f"/api/v1/providers/custom/{provider_id}", data=parameters)
         return response
 
     def delete_provider(self, provider_id: str) -> dict:
@@ -968,6 +1037,62 @@ class OAAClient():
         """
         return self._perform_request(method="DELETE", api_path=api_path, params=params)
 
+    # refresh OAuth tokens this many seconds before they expire
+    TOKEN_REFRESH_MARGIN = 60
+
+    def _fetch_oauth_token(self) -> None:
+        """Request a new OAuth access token and store it in `self.api_key`
+
+        Raises:
+            OAAResponseError: When the token endpoint rejects the request
+            OAAConnectionError: When unable to connect to the token endpoint
+        """
+        token_url = self._oauth.resolve_token_url(self.url)
+        body = self._oauth.build_token_request(token_url)
+        headers = {"user-agent": self._user_agent, "accept": "application/json"}
+
+        try:
+            response = self._token_session.post(token_url, data=body, headers=headers, timeout=self._api_timeout, verify=self.verify_ssl)
+        except requests.exceptions.RequestException as e:
+            raise OAAConnectionError("ERROR", message=f"Unable to request OAuth token: {e}")
+
+        try:
+            result = response.json()
+        except requests.exceptions.JSONDecodeError:
+            result = {}
+        if not isinstance(result, dict):
+            # e.g. a proxy or WAF returning a JSON list or string
+            result = {}
+
+        if not response.ok:
+            # OAuth style errors use `error` and `error_description`, fall back to the Veza style
+            code = result.get("error") or result.get("code") or "ERROR"
+            message = result.get("error_description") or result.get("message") or f"OAuth token request failed: {response.reason}"
+            log.debug(f"OAuth token request failed: {response.status_code} {code}")
+            raise OAAResponseError(code, message, status_code=response.status_code)
+
+        access_token = result.get("access_token")
+        if not access_token:
+            raise OAAClientError("ERROR", "OAuth token response did not include an access_token", status_code=response.status_code)
+
+        self.api_key = access_token
+        try:
+            expires_in = float(result.get("expires_in", 0))
+        except (TypeError, ValueError):
+            expires_in = 0
+        # without a usable expires_in refresh on every request would be wasteful; rely on the 401 retry instead
+        self._token_expires_at = time.monotonic() + expires_in if expires_in > 0 else None
+        # short lived tokens would otherwise always be inside the margin and refresh on every request
+        self._token_refresh_margin = min(self.TOKEN_REFRESH_MARGIN, expires_in / 2)
+        log.debug("Obtained OAuth access token")
+
+    def _ensure_token(self) -> None:
+        """Refresh the OAuth access token when it is missing or about to expire. No-op for API keys."""
+        if not self._oauth:
+            return
+        if self.api_key is None or (self._token_expires_at is not None and time.monotonic() >= self._token_expires_at - self._token_refresh_margin):
+            self._fetch_oauth_token()
+
     def _perform_request(self, method: str, api_path: str, data: dict = None, params: dict = None) -> dict:
         """Perform HTTP request
 
@@ -986,64 +1111,76 @@ class OAAClient():
         """
 
         response = None
-
-        headers = {}
-        headers["authorization"] = f"Bearer {self.api_key}"
-        headers["user-agent"] = self._user_agent
-        api_timeout = self._api_timeout
+        auth_retried = False
         api_path = api_path.lstrip("/")
 
-        if params:
-            params_str = urllib.parse.urlencode(params)
-        else:
-            params_str = None
+        while True:
+            self._ensure_token()
 
-        try:
-            response = self._http_adapter.request(method, f"{self.url}/{api_path}", headers=headers, timeout=api_timeout, params=params_str, json=data, verify=self.verify_ssl)
-            response.raise_for_status()
-            # load API response
-            result = response.json()
-        except requests.exceptions.HTTPError as e:
-            # HTTP request completed but returned an error
-            # decode expected error message parts
-            details = []
-            timestamp = None
-            request_id = None
+            headers = {}
+            headers["authorization"] = f"Bearer {self.api_key}"
+            headers["user-agent"] = self._user_agent
+            api_timeout = self._api_timeout
+
+            if params:
+                params_str = urllib.parse.urlencode(params)
+            else:
+                params_str = None
+
             try:
+                response = self._http_adapter.request(method, f"{self.url}/{api_path}", headers=headers, timeout=api_timeout, params=params_str, json=data, verify=self.verify_ssl)
+                response.raise_for_status()
+                # load API response
                 result = response.json()
-                message = result.get("message", f"Unknown error during {method.upper()}")
-                code = result.get("code", "UNKNOWN")
-                timestamp = result.get("timestamp", None)
-                request_id = result.get("request_id", None)
-                details = result.get("details", [])
-            except requests.exceptions.JSONDecodeError:
-                # response is not a valid JSON, unexpected
-                result = {}
-                code = "ERROR"
-                if response.reason:
-                    message = f"Error reason: {response.reason}"
+            except requests.exceptions.HTTPError as e:
+                # HTTP request completed but returned an error
+                # check for an expired or revoked OAuth token before parsing the body, the body may not be JSON
+                if e.response.status_code == 401 and self._oauth and not auth_retried:
+                    # token may have been revoked or expired early, get a new one and retry once
+                    log.debug("API returned 401, refreshing OAuth token and retrying")
+                    self._fetch_oauth_token()
+                    auth_retried = True
+                    continue
+
+                # decode expected error message parts
+                details = []
+                timestamp = None
+                request_id = None
+                try:
+                    result = response.json()
+                    message = result.get("message", f"Unknown error during {method.upper()}")
+                    code = result.get("code", "UNKNOWN")
+                    timestamp = result.get("timestamp", None)
+                    request_id = result.get("request_id", None)
+                    details = result.get("details", [])
+                except requests.exceptions.JSONDecodeError:
+                    # response is not a valid JSON, unexpected
+                    result = {}
+                    code = "ERROR"
+                    if response.reason:
+                        message = f"Error reason: {response.reason}"
+                    else:
+                        message = "Unknown error, response is not JSON"
+
+                log.debug(f"Error returned by Veza API: {e.response.status_code} {message} {e.response.url} request_id: {request_id} timestamp {timestamp}")
+                for d in details:
+                    log.debug(d)
+
+                raise OAAResponseError(code, message, status_code=e.response.status_code, details=details, timestamp=timestamp, request_id=request_id)
+            except requests.exceptions.JSONDecodeError as e:
+                # HTTP response reports success but response does not decode to JSON
+                if response:
+                    status_code = response.status_code
                 else:
-                    message = "Unknown error, response is not JSON"
+                    status_code = None
+                raise OAAClientError("ERROR", "Response not JSON", status_code=status_code)
+            except requests.exceptions.RequestException as e:
+                if not e.response:
+                    raise OAAConnectionError("ERROR", message=str(e))
+                else:
+                    raise OAAConnectionError("ERROR", message=str(e), status_code=e.response.status_code)
 
-            log.debug(f"Error returned by Veza API: {e.response.status_code} {message} {e.response.url} request_id: {request_id} timestamp {timestamp}")
-            for d in details:
-                log.debug(d)
-
-            raise OAAResponseError(code, message, status_code=e.response.status_code, details=details, timestamp=timestamp, request_id=request_id)
-        except requests.exceptions.JSONDecodeError as e:
-            # HTTP response reports success but response does not decode to JSON
-            if response:
-                status_code = response.status_code
-            else:
-                status_code = None
-            raise OAAClientError("ERROR", "Response not JSON", status_code=status_code)
-        except requests.exceptions.RequestException as e:
-            if not e.response:
-                raise OAAConnectionError("ERROR", message=str(e))
-            else:
-                raise OAAConnectionError("ERROR", message=str(e), status_code=e.response.status_code)
-
-        return result
+            return result
 
     def _test_connection(self) -> None:
         """Test the OAAClient connection
@@ -1140,14 +1277,21 @@ def report_builder_entrypoint() -> None:
 
     veza_url = args.host
     veza_api_key = os.getenv("VEZA_API_KEY", "")
+    oauth_config = None
+    if not veza_api_key:
+        try:
+            oauth_config = OAuthConfig.from_env()
+        except ValueError as e:
+            log.error(e)
+            sys.exit(1)
     if not veza_url:
         oaautils.log_arg_error(log, "--host", "VEZA_URL")
-    if not veza_api_key:
+    if not veza_api_key and not oauth_config:
         oaautils.log_arg_error(log, None, "VEZA_API_KEY")
-    if not veza_url and veza_api_key:
+    if not veza_url and (veza_api_key or oauth_config):
         sys.exit(1)
 
-    vezacon = OAAClient(veza_url, api_key=veza_api_key)
+    vezacon = OAAClient(veza_url, api_key=veza_api_key or None, oauth_config=oauth_config)
 
     log.info(f"Loading report from {report_file}")
     try:
@@ -1183,6 +1327,7 @@ def main():
     user = None
     password = None
     token = None
+    oauth_config = None
 
     if args.auth_file:
         if not os.path.isfile(args.auth_file):
@@ -1191,9 +1336,11 @@ def main():
         auth_config = oaautils.load_json_from_file(args.auth_file)
 
         host = auth_config['host']
-        user = auth_config['user']
+        user = auth_config.get('user')
         if "token" in auth_config:
             token = auth_config['token']
+        elif "oauth" in auth_config:
+            oauth_config = OAuthConfig.from_dict(auth_config['oauth'])
         elif "password" in auth_config:
             password = auth_config['password']
     else:
@@ -1209,7 +1356,7 @@ def main():
         raise Exception(f"Missing value in app template: {e}")
 
     try:
-        con = OAAClient(host, api_key=token)
+        con = OAAClient(host, api_key=token, oauth_config=oauth_config)
         provider = con.get_provider(provider_name)
         if provider:
             print("-- Found existing provider")

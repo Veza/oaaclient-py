@@ -1,5 +1,15 @@
 # OAA Client Change Log
 
+## v1.2.3
+* Add `OAAClient.patch_provider()` to update parameters of an existing custom provider by ID. Takes the provider ID and a dictionary of parameters to update.
+* Add OAuth2 authentication support to `OAAClient` as an alternative to API keys. Configure with the new `oaaclient.auth` classes `ClientCredentialsConfig` (client ID/secret) or `JWTBearerConfig` (signed JWT assertion) and pass as `oauth_config`, or set the `VEZA_OAUTH_*` environment variables. Tokens are refreshed automatically. Existing `api_key`/`token`/`VEZA_API_KEY` usage is unchanged. JWT bearer signing requires `pip install oaaclient[jwt]`.
+  ```python
+  from oaaclient.auth import ClientCredentialsConfig
+  from oaaclient.client import OAAClient
+
+  veza_con = OAAClient("tenant.vezacloud.com", oauth_config=ClientCredentialsConfig(client_id="...", client_secret="..."))
+  ```
+
 ## v1.2.2
 * Fix `HostNode.add_grant()` merging a principal's host-level and resource-level grants into one. Grants are now keyed by target as well as principal, so grants on different targets stay separate. `add_grant()` now also rejects an empty string in `resources`.
 

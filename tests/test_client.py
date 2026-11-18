@@ -1112,3 +1112,52 @@ def test_api_multipart(mock_request):
     assert {'operation': 'complete', 'upload_id': mock_upload_id, 'sequence_count': 3} == complete_call.kwargs.get("json")
 
     assert uploaded_bytes.decode() == "x"*1055
+
+@pytest.fixture
+def mock_con():
+    with patch.object(OAAClient, "_test_connection", return_value=None):
+        yield OAAClient(url="https://noreply.vezacloud.com", token="1234")
+
+
+def test_patch_provider(mock_con):
+    expected = {"id": "abc-123", "name": "test", "provisioning": True}
+    with patch.object(OAAClient, "api_patch", return_value=expected) as mock_patch:
+        response = mock_con.patch_provider("abc-123", {"provisioning": True})
+
+    mock_patch.assert_called_once_with("/api/v1/providers/custom/abc-123", data={"provisioning": True})
+    assert response == expected
+
+
+def test_patch_provider_multiple_parameters(mock_con):
+    params = {"provisioning": False, "application_types": ["a", "b"], "name": "new"}
+    with patch.object(OAAClient, "api_patch", return_value={}) as mock_patch:
+        mock_con.patch_provider("abc-123", params)
+
+    mock_patch.assert_called_once_with("/api/v1/providers/custom/abc-123", data=params)
+
+
+@pytest.mark.parametrize("bad_params", [{}, None, [], ["a"], "string", 1])
+def test_patch_provider_invalid_parameters(mock_con, bad_params):
+    with patch.object(OAAClient, "api_patch") as mock_patch:
+        with pytest.raises(ValueError):
+            mock_con.patch_provider("abc-123", bad_params)
+
+    mock_patch.assert_not_called()
+
+
+@pytest.mark.parametrize("bad_id", ["", "   ", None, 123, "abc/def", "abc:icon", "abc?x=1", "abc#frag", " abc"])
+def test_patch_provider_invalid_provider_id(mock_con, bad_id):
+    with patch.object(OAAClient, "api_patch") as mock_patch:
+        with pytest.raises(ValueError):
+            mock_con.patch_provider(bad_id, {"provisioning": True})
+
+    mock_patch.assert_not_called()
+
+
+def test_patch_provider_api_error(mock_con):
+    error = OAAResponseError(error="NOT_FOUND", message="provider not found", status_code=404)
+    with patch.object(OAAClient, "api_patch", side_effect=error):
+        with pytest.raises(OAAResponseError) as exc_info:
+            mock_con.patch_provider("missing", {"provisioning": True})
+
+    assert exc_info.value.status_code == 404

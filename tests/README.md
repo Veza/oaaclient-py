@@ -24,3 +24,7 @@ To run the complete tests, which include pushing a payload to Veza, set the OS e
 Tests validate Veza parsing after OAA push have a default timeout. If the data source does not change from the pending
 state within the timeout the test will fail. The timeout can be over-ridden with the OS environment variable
 `OAA_PUSH_TIMEOUT` which is a number in seconds for the timeout.
+
+OAuth live tests in `test_oauth.py` require `PYTEST_VEZA_HOST` plus the standard client variables `VEZA_OAUTH_CLIENT_ID` and either `VEZA_OAUTH_CLIENT_SECRET` (client credentials) or `VEZA_OAUTH_PRIVATE_KEY_PATH` / `VEZA_OAUTH_PRIVATE_KEY_BASE64` (JWT bearer, key file path or base64 encoded PEM, optional `VEZA_OAUTH_KEY_ID`). Tests for a flow are skipped when its credentials are not set.
+
+`test_oauth.py` includes a full push test that runs once for each OAuth flow that is configured. By default a flow without credentials is skipped; set `PYTEST_REQUIRE_LIVE_AUTH` to `client_secret`, `jwt` or both (comma separated) to make a missing flow fail instead, e.g. in CI.

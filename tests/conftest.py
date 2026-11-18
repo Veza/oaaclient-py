@@ -12,11 +12,14 @@ log = logging.getLogger()
 
 @pytest.fixture(scope="module")
 def veza_con():
-    test_deployment = os.getenv("PYTEST_VEZA_HOST")
-    test_api_key = os.getenv("VEZA_API_KEY")
-    assert test_api_key is not None
+    """OAAClient connection to the test deployment
 
-    veza_con = OAAClient(url=test_deployment, token=test_api_key)
+    Credentials are resolved by OAAClient from the environment: VEZA_API_KEY when set, otherwise the
+    VEZA_OAUTH_* variables. Tests that need a specific auth mode override this fixture (see test_oauth.py).
+    """
+    test_deployment = os.getenv("PYTEST_VEZA_HOST")
+
+    veza_con = OAAClient(url=test_deployment)
 
     yield veza_con
 
